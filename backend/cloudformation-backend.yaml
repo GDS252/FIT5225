@@ -1,0 +1,353 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Bird Recognition Backend Infrastructure'
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: 'Cognito User Pool ID'
+    Default: 'ap-southeast-2_xMyeYNwU4'
+  
+  UserPoolClientId:
+    Type: String
+    Description: 'Cognito User Pool Client ID'
+    Default: '41f6f90eaa49b08hm4fp9u2s6o'
+  
+  UploadBucket:
+    Type: String
+    Description: 'S3 bucket for file uploads'
+    Default: 'birdtag-media-uploads-2025-birdtag-laobukepo'
+  
+  ThumbnailBucket:
+    Type: String
+    Description: 'S3 bucket for thumbnails'
+    Default: 'birdtag-media-thumbnails-laobukepo'
+
+Resources:
+  # IAM Role for Lambda functions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BirdRecognitionLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${UploadBucket}'
+                  - !Sub 'arn:aws:s3:::${UploadBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ThumbnailBucket}'
+                  - !Sub 'arn:aws:s3:::${ThumbnailBucket}/*'
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt FilesTable.Arn
+
+  # DynamoDB Table for file metadata
+  FilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bird-files-table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: file_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: uploaded_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: file_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+            - AttributeName: uploaded_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # File Management Lambda Function
+  FileManagementFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bird-file-management
+      Runtime: python3.9
+      Handler: file_management_lambda.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Access-Control-Allow-Origin': '*',
+                      'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+                  },
+                  'body': json.dumps({'message': 'File management function placeholder'})
+              }
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucket
+          THUMBNAIL_BUCKET: !Ref ThumbnailBucket
+          FILES_TABLE: !Ref FilesTable
+      Timeout: 30
+      MemorySize: 256
+
+  # S3 Processor Lambda Function
+  S3ProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bird-s3-processor
+      Runtime: python3.9
+      Handler: s3_processor_lambda.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': 'S3 processor function placeholder'
+              }
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucket
+          THUMBNAIL_BUCKET: !Ref ThumbnailBucket
+          FILES_TABLE: !Ref FilesTable
+      Timeout: 60
+      MemorySize: 512
+
+  # S3 Event Notification for file processing
+  S3BucketNotification:
+    Type: AWS::S3::BucketNotification
+    Properties:
+      Bucket: !Ref UploadBucket
+      LambdaConfigurations:
+        - Event: s3:ObjectCreated:*
+          Function: !GetAtt S3ProcessorFunction.Arn
+          Filter:
+            S3Key:
+              Rules:
+                - Name: prefix
+                  Value: uploads/
+
+  # Lambda permission for S3 to invoke processor
+  S3ProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3ProcessorFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${UploadBucket}'
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: BirdRecognitionAPI
+      Description: 'Bird Recognition API'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Cognito Authorizer
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CognitoAuthorizer
+      Type: COGNITO_USER_POOLS
+      RestApiId: !Ref ApiGateway
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}'
+
+  # API Gateway Resources
+  FilesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: files
+
+  QueryResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: query
+
+  ByTagsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref QueryResource
+      PathPart: by-tags
+
+  TagsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: tags
+
+  UpdateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref TagsResource
+      PathPart: update
+
+  AdminResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: admin
+
+  AdminFilesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref AdminResource
+      PathPart: files
+
+  DeleteResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref AdminFilesResource
+      PathPart: delete
+
+  # API Gateway Methods
+  GetFilesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref FilesResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostFilesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref FilesResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostByTagsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ByTagsResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostTagsUpdateMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UpdateResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DeleteResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  # Lambda permissions for API Gateway
+  FileManagementPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref FileManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GetFilesMethod
+      - PostFilesMethod
+      - PostByTagsMethod
+      - PostTagsUpdateMethod
+      - PostDeleteMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: stage1
+
+Outputs:
+  ApiGatewayUrl:
+    Description: 'API Gateway URL'
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/stage1'
+  
+  FileManagementFunctionArn:
+    Description: 'File Management Lambda Function ARN'
+    Value: !GetAtt FileManagementFunction.Arn
+  
+  S3ProcessorFunctionArn:
+    Description: 'S3 Processor Lambda Function ARN'
+    Value: !GetAtt S3ProcessorFunction.Arn
+  
+  FilesTableName:
+    Description: 'DynamoDB Files Table Name'
+    Value: !Ref FilesTable

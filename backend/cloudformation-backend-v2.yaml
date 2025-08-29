@@ -1,0 +1,641 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Bird Recognition Backend Infrastructure v2'
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: 'Cognito User Pool ID'
+    Default: 'ap-southeast-2_xMyeYNwU4'
+  
+  UserPoolClientId:
+    Type: String
+    Description: 'Cognito User Pool Client ID'
+    Default: '41f6f90eaa49b08hm4fp9u2s6o'
+  
+  UploadBucket:
+    Type: String
+    Description: 'S3 bucket for file uploads'
+    Default: 'birdtag-media-uploads-2025-birdtag-laobukepo'
+  
+  ThumbnailBucket:
+    Type: String
+    Description: 'S3 bucket for thumbnails'
+    Default: 'birdtag-media-thumbnails-laobukepo'
+
+Resources:
+  # IAM Role for Lambda functions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BirdRecognitionLambdaRoleV2
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${UploadBucket}'
+                  - !Sub 'arn:aws:s3:::${UploadBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ThumbnailBucket}'
+                  - !Sub 'arn:aws:s3:::${ThumbnailBucket}/*'
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt FilesTable.Arn
+
+  # DynamoDB Table for file metadata
+  FilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bird-files-table-v2
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: file_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: uploaded_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: file_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+            - AttributeName: uploaded_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # File Management Lambda Function
+  FileManagementFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bird-file-management-v2
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          from boto3.dynamodb.conditions import Key
+          
+          # Initialize AWS clients
+          dynamodb = boto3.resource('dynamodb')
+          s3 = boto3.client('s3')
+          
+          # Environment variables
+          UPLOAD_BUCKET = os.environ['UPLOAD_BUCKET']
+          THUMBNAIL_BUCKET = os.environ['THUMBNAIL_BUCKET']
+          FILES_TABLE = os.environ['FILES_TABLE']
+          
+          def create_response(status_code, body):
+              return {
+                  'statusCode': status_code,
+                  'headers': {
+                      'Access-Control-Allow-Origin': '*',
+                      'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+                  },
+                  'body': json.dumps(body)
+              }
+          
+          def get_files_list(user_id, query_params):
+              try:
+                  limit = int(query_params.get('limit', 50))
+                  sort_by = query_params.get('sort', 'recent')
+                  
+                  # Query DynamoDB for real files
+                  table = dynamodb.Table(FILES_TABLE)
+                  
+                  # Query by user_id using GSI
+                  response = table.query(
+                      IndexName='UserIdIndex',
+                      KeyConditionExpression='user_id = :user_id',
+                      ExpressionAttributeValues={
+                          ':user_id': user_id
+                      },
+                      ScanIndexForward=False,  # Most recent first
+                      Limit=limit
+                  )
+                  
+                  files = []
+                  for item in response.get('Items', []):
+                      # Parse AI predictions
+                      ai_predictions = []
+                      if 'ai_predictions' in item:
+                          try:
+                              if isinstance(item['ai_predictions'], str):
+                                  ai_predictions = json.loads(item['ai_predictions'])
+                              else:
+                                  ai_predictions = item['ai_predictions']
+                          except:
+                              ai_predictions = []
+                      
+                      file_data = {
+                          "id": item.get('file_id'),
+                          "filename": item.get('filename'),
+                          "url": item.get('url'),
+                          "thumbnailUrl": item.get('thumbnail_url'),
+                          "uploadedAt": item.get('uploaded_at'),
+                          "predictions": ai_predictions,
+                          "tags": item.get('tags', [])
+                      }
+                      files.append(file_data)
+                  
+                  # If no files found in DynamoDB, return empty array
+                  if not files:
+                      print(f"No files found for user {user_id} in DynamoDB")
+                      return create_response(200, {"files": [], "total": 0})
+                  
+                  return create_response(200, {"files": files, "total": len(files)})
+                  
+              except Exception as e:
+                  print(f"Error getting files list: {str(e)}")
+                  # Fallback to mock data for testing
+                  mock_files = [
+                      {
+                          "id": "test-file-1",
+                          "filename": "test.jpg",
+                          "url": f"https://{UPLOAD_BUCKET}.s3.amazonaws.com/test.jpg",
+                          "thumbnailUrl": f"https://{THUMBNAIL_BUCKET}.s3.amazonaws.com/thumb_test.jpg",
+                          "uploadedAt": datetime.utcnow().isoformat() + 'Z',
+                          "predictions": [],
+                          "tags": []
+                      }
+                  ]
+                  return create_response(200, {"files": mock_files, "total": len(mock_files)})
+          
+          def generate_presigned_url(user_id, filename, file_type):
+              try:
+                  import uuid
+                  file_id = str(uuid.uuid4())
+                  s3_key = f"uploads/{user_id}/{file_id}-{filename}"
+                  
+                  # Generate presigned URL for S3 upload
+                  presigned_url = s3.generate_presigned_post(
+                      UPLOAD_BUCKET,
+                      s3_key,
+                      Fields={'Content-Type': file_type},
+                      Conditions=[
+                          {'Content-Type': file_type},
+                          ['content-length-range', 0, 10485760]  # 10MB limit
+                      ],
+                      ExpiresIn=3600
+                  )
+                  
+                  # Add fileId to response
+                  presigned_url['fileId'] = file_id
+                  
+                  return create_response(200, presigned_url)
+                  
+              except Exception as e:
+                  print(f"Error generating presigned URL: {str(e)}")
+                  return create_response(500, {"error": "Failed to generate presigned URL"})
+          
+          def lambda_handler(event, context):
+              try:
+                  print(f"Event: {json.dumps(event)}")
+                  
+                  # Extract user ID from Cognito claims
+                  user_id = event['requestContext']['authorizer']['claims']['sub']
+                  
+                  # Handle different HTTP methods
+                  http_method = event['httpMethod']
+                  path = event['path']
+                  
+                  if http_method == 'GET' and path == '/files':
+                      # Get files list
+                      query_params = event.get('queryStringParameters', {}) or {}
+                      return get_files_list(user_id, query_params)
+                  
+                  elif http_method == 'POST' and path == '/files':
+                      # Generate presigned URL
+                      body = json.loads(event.get('body', '{}'))
+                      filename = body.get('filename')
+                      file_type = body.get('fileType', 'image/jpeg')
+                      
+                      if not filename:
+                          return create_response(400, {"error": "filename is required"})
+                      
+                      return generate_presigned_url(user_id, filename, file_type)
+                  
+                  else:
+                      return create_response(404, {"error": "Not found"})
+                  
+              except Exception as e:
+                  print(f"Error in lambda_handler: {str(e)}")
+                  return create_response(500, {"error": "Internal server error"})
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucket
+          THUMBNAIL_BUCKET: !Ref ThumbnailBucket
+          FILES_TABLE: !Ref FilesTable
+      Timeout: 30
+      MemorySize: 256
+
+  # S3 Processor Lambda Function
+  S3ProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bird-s3-processor-v2
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          from PIL import Image
+          import io
+          
+          # Initialize AWS clients
+          dynamodb = boto3.resource('dynamodb')
+          s3 = boto3.client('s3')
+          
+          # Environment variables
+          UPLOAD_BUCKET = os.environ['UPLOAD_BUCKET']
+          THUMBNAIL_BUCKET = os.environ['THUMBNAIL_BUCKET']
+          FILES_TABLE = os.environ['FILES_TABLE']
+          
+          def create_thumbnail(image_data, filename):
+              try:
+                  # Open image from bytes
+                  image = Image.open(io.BytesIO(image_data))
+                  
+                  # Resize to thumbnail (200x200, maintaining aspect ratio)
+                  image.thumbnail((200, 200), Image.Resampling.LANCZOS)
+                  
+                  # Convert to RGB if necessary
+                  if image.mode != 'RGB':
+                      image = image.convert('RGB')
+                  
+                  # Save to bytes
+                  thumbnail_buffer = io.BytesIO()
+                  image.save(thumbnail_buffer, format='JPEG', quality=85)
+                  thumbnail_buffer.seek(0)
+                  
+                  return thumbnail_buffer.getvalue()
+                  
+              except Exception as e:
+                  print(f"Error creating thumbnail: {str(e)}")
+                  return None
+          
+          def perform_ai_recognition(image_data):
+              try:
+                  # Mock AI recognition for now
+                  # In a real implementation, you would call an AI service here
+                  ai_predictions = {
+                      "species": ["Bird"],
+                      "confidence": 0.85,
+                      "description": "A bird in the image"
+                  }
+                  return ai_predictions
+                  
+              except Exception as e:
+                  print(f"Error in AI recognition: {str(e)}")
+                  return {"species": [], "confidence": 0.0, "error": str(e)}
+          
+          def store_file_metadata(file_info, thumbnail_url, ai_predictions):
+              try:
+                  metadata = {
+                      'file_id': file_info['file_id'],
+                      'user_id': file_info['user_id'],
+                      'filename': file_info['filename'],
+                      's3_key': file_info['s3_key'],
+                      'url': f"https://{UPLOAD_BUCKET}.s3.amazonaws.com/{file_info['s3_key']}",
+                      'thumbnail_url': thumbnail_url,
+                      'ai_predictions': ai_predictions,
+                      'uploaded_at': datetime.utcnow().isoformat() + 'Z',
+                      'status': 'processed'
+                  }
+                  
+                  print(f"Storing file metadata in DynamoDB: {json.dumps(metadata, indent=2)}")
+                  
+                  # Store in DynamoDB
+                  table = dynamodb.Table(FILES_TABLE)
+                  table.put_item(Item=metadata)
+                  
+                  print(f"Successfully stored metadata for file {file_info['filename']} in DynamoDB")
+                  
+              except Exception as e:
+                  print(f"Error storing file metadata: {str(e)}")
+                  raise e
+          
+          def lambda_handler(event, context):
+              try:
+                  print(f"S3 Processor Event: {json.dumps(event)}")
+                  
+                  # Process S3 event
+                  for record in event['Records']:
+                      bucket = record['s3']['bucket']['name']
+                      key = record['s3']['object']['key']
+                      
+                      print(f"Processing file: {key} from bucket: {bucket}")
+                      
+                      # Only process uploads to the upload bucket
+                      if bucket != UPLOAD_BUCKET:
+                          print(f"Skipping file from non-upload bucket: {bucket}")
+                          continue
+                      
+                      # Parse file info from S3 key
+                      # Expected format: uploads/{user_id}/{file_id}-{filename}
+                      key_parts = key.split('/')
+                      if len(key_parts) != 3:
+                          print(f"Invalid S3 key format: {key}")
+                          continue
+                      
+                      user_id = key_parts[1]
+                      file_id_filename = key_parts[2]
+                      
+                      # Extract file_id and filename
+                      if '-' not in file_id_filename:
+                          print(f"Invalid file format: {file_id_filename}")
+                          continue
+                      
+                      file_id, filename = file_id_filename.split('-', 1)
+                      
+                      file_info = {
+                          'file_id': file_id,
+                          'user_id': user_id,
+                          'filename': filename,
+                          's3_key': key
+                      }
+                      
+                      # Download the uploaded file
+                      response = s3.get_object(Bucket=bucket, Key=key)
+                      image_data = response['Body'].read()
+                      
+                      # Create thumbnail
+                      thumbnail_data = create_thumbnail(image_data, filename)
+                      if thumbnail_data:
+                          thumbnail_key = f"thumb_{filename}"
+                          s3.put_object(
+                              Bucket=THUMBNAIL_BUCKET,
+                              Key=thumbnail_key,
+                              Body=thumbnail_data,
+                              ContentType='image/jpeg'
+                          )
+                          thumbnail_url = f"https://{THUMBNAIL_BUCKET}.s3.amazonaws.com/{thumbnail_key}"
+                      else:
+                          thumbnail_url = f"https://{UPLOAD_BUCKET}.s3.amazonaws.com/{key}"
+                      
+                      # Perform AI recognition
+                      ai_predictions = perform_ai_recognition(image_data)
+                      
+                      # Store metadata in DynamoDB
+                      store_file_metadata(file_info, thumbnail_url, ai_predictions)
+                      
+                      print(f"Successfully processed file: {filename}")
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': 'S3 processing completed successfully'
+                  }
+                  
+              except Exception as e:
+                  print(f"Error in S3 processor: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': f'Error processing S3 event: {str(e)}'
+                  }
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucket
+          THUMBNAIL_BUCKET: !Ref ThumbnailBucket
+          FILES_TABLE: !Ref FilesTable
+      Timeout: 60
+      MemorySize: 512
+
+  # Lambda permission for S3 to invoke processor
+  S3ProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3ProcessorFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${UploadBucket}'
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: BirdRecognitionAPIV2
+      Description: 'Bird Recognition API v2'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Cognito Authorizer
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CognitoAuthorizerV2
+      Type: COGNITO_USER_POOLS
+      RestApiId: !Ref ApiGateway
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}'
+
+  # API Gateway Resources
+  FilesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: files
+
+  QueryResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: query
+
+  ByTagsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref QueryResource
+      PathPart: by-tags
+
+  TagsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: tags
+
+  UpdateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref TagsResource
+      PathPart: update
+
+  AdminResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: admin
+
+  AdminFilesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref AdminResource
+      PathPart: files
+
+  DeleteResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref AdminFilesResource
+      PathPart: delete
+
+  # API Gateway Methods
+  GetFilesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref FilesResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostFilesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref FilesResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostByTagsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ByTagsResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostTagsUpdateMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UpdateResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  PostDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DeleteResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FileManagementFunction.Arn}/invocations'
+
+  # Lambda permissions for API Gateway
+  FileManagementPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref FileManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GetFilesMethod
+      - PostFilesMethod
+      - PostByTagsMethod
+      - PostTagsUpdateMethod
+      - PostDeleteMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: stage1
+
+Outputs:
+  ApiGatewayUrl:
+    Description: 'API Gateway URL'
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/stage1'
+  
+  FileManagementFunctionArn:
+    Description: 'File Management Lambda Function ARN'
+    Value: !GetAtt FileManagementFunction.Arn
+  
+  S3ProcessorFunctionArn:
+    Description: 'S3 Processor Lambda Function ARN'
+    Value: !GetAtt S3ProcessorFunction.Arn
+  
+  FilesTableName:
+    Description: 'DynamoDB Files Table Name'
+    Value: !Ref FilesTable

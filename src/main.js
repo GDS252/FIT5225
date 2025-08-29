@@ -18,8 +18,8 @@ import { Amplify } from 'aws-amplify';
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: 'ap-southeast-2_YLmR39QZq',         // Example: 'ap-southeast-2_xxxxxxxxx'
-      userPoolClientId: '4erh8862poahob6rajh7qossc6', // Your App Client ID created in Cognito
+      userPoolId: 'ap-southeast-2_xMyeYNwU4',         // Example: 'ap-southeast-2_xxxxxxxxx'
+      userPoolClientId: '41f6f90eaa49b08hm4fp9u2s6o', // Your App Client ID created in Cognito
       region:         'ap-southeast-2',
       loginWith: {
         email: true,

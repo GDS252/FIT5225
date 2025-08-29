@@ -400,7 +400,7 @@ const handleDeleteImage = async (imageId) => {
     console.log('Deleting image:', imageId, image.url);
     
     // Call backend API to delete file
-    await apiClient.post('/admin/files/delete', {
+    await apiClient.post('/admin/files', {
       urls: [image.url]
     });
     

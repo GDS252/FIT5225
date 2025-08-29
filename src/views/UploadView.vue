@@ -282,7 +282,7 @@ const deleteUpload = async (upload) => {
     console.log('Deleting upload:', upload.id, upload.url);
     
     // Call backend API to delete file
-    await apiClient.post('/admin/files/delete', {
+    await apiClient.post('/admin/files', {
       urls: [upload.url]
     });
     

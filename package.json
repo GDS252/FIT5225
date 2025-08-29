@@ -10,7 +10,7 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "@aws-amplify/ui-vue": "^3.1.0",
+    "@aws-amplify/ui-vue": "^4.0.0",
     "@element-plus/icons-vue": "^2.1.0",
     "aws-amplify": "^6.15.5",
     "axios": "^1.11.0",

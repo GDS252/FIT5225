@@ -14,12 +14,12 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 // AWS Amplify
 import { Amplify } from 'aws-amplify';
 
-// !!重要!! 请将以下值替换为您自己的 Cognito 用户池信息
+// !!IMPORTANT!! Please replace the following values with your own Cognito User Pool information
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: 'ap-southeast-2_YLmR39QZq',         // 例如: 'ap-southeast-2_xxxxxxxxx'
-      userPoolClientId: '4erh8862poahob6rajh7qossc6', // 您在 Cognito 中创建的应用程序客户端ID
+      userPoolId: 'ap-southeast-2_YLmR39QZq',         // Example: 'ap-southeast-2_xxxxxxxxx'
+      userPoolClientId: '4erh8862poahob6rajh7qossc6', // Your App Client ID created in Cognito
       region:         'ap-southeast-2',
       loginWith: {
         email: true,

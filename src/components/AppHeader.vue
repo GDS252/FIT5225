@@ -1,13 +1,13 @@
 <template>
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
     <div class="container-fluid">
-      <!-- Logo和品牌名称 -->
+      <!-- Logo and brand name -->
       <router-link class="navbar-brand d-flex align-items-center" to="/">
         <i class="bi bi-camera-fill me-2 fs-3"></i>
         <span class="fw-bold">Bird Recognition System</span>
       </router-link>
 
-      <!-- 移动端切换按钮 -->
+      <!-- Mobile toggle button -->
       <button
         class="navbar-toggler"
         type="button"
@@ -17,7 +17,7 @@
         <span class="navbar-toggler-icon"></span>
       </button>
 
-      <!-- 导航菜单 -->
+      <!-- Navigation menu -->
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav me-auto">
           <li class="nav-item">

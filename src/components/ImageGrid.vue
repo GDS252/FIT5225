@@ -1,25 +1,25 @@
 <template>
   <div class="image-grid">
-    <!-- 加载状态 -->
+    <!-- Loading state -->
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">加载中...</span>
+        <span class="visually-hidden">Loading...</span>
       </div>
-      <p class="mt-3 text-muted">正在加载图片...</p>
+      <p class="mt-3 text-muted">Loading images...</p>
     </div>
 
-    <!-- 空状态 -->
+    <!-- Empty state -->
     <div v-else-if="images.length === 0" class="empty-state text-center py-5">
       <i class="bi bi-images display-1 text-muted mb-3"></i>
       <h4 class="text-muted">{{ emptyMessage }}</h4>
       <p class="text-muted">{{ emptySubMessage }}</p>
       <router-link v-if="showUploadButton" to="/upload" class="btn btn-primary">
         <i class="bi bi-cloud-upload me-2"></i>
-        上传第一张图片
+        Upload First Image
       </router-link>
     </div>
 
-    <!-- 图片网格 -->
+    <!-- Image grid -->
     <div v-else class="row g-4">
       <div
         v-for="image in images"
@@ -27,7 +27,7 @@
         class="col-12 col-sm-6 col-md-4 col-lg-3"
       >
         <div class="card image-card h-100 shadow-sm">
-          <!-- 图片 -->
+          <!-- Image -->
           <div class="image-container position-relative">
             <img
               :src="image.thumbnailUrl || image.url"
@@ -40,34 +40,34 @@
               <button
                 class="btn btn-light btn-sm me-2"
                 @click="openImageModal(image)"
-                title="查看大图"
+                title="View large image"
               >
                 <i class="bi bi-eye"></i>
               </button>
               <button
                 class="btn btn-primary btn-sm me-2"
                 @click="openTagModal(image)"
-                title="编辑标签"
+                title="Edit tags"
               >
                 <i class="bi bi-tags"></i>
               </button>
               <button
                 class="btn btn-danger btn-sm"
                 @click="confirmDelete(image)"
-                title="删除"
+                title="Delete"
               >
                 <i class="bi bi-trash"></i>
               </button>
             </div>
           </div>
 
-          <!-- 图片信息 -->
+          <!-- Image information -->
           <div class="card-body">
             <h6 class="card-title text-truncate" :title="image.filename">
               {{ image.filename }}
             </h6>
             
-            <!-- 识别结果 -->
+            <!-- Recognition results -->
             <div v-if="image.predictions && image.predictions.length > 0" class="mb-2">
               <span class="badge bg-success me-1">
                 {{ image.predictions[0].label }}
@@ -77,7 +77,7 @@
               </small>
             </div>
 
-            <!-- 标签 -->
+            <!-- Tags -->
             <div v-if="image.tags && image.tags.length > 0" class="mb-2">
               <span
                 v-for="tag in image.tags.slice(0, 3)"
@@ -87,11 +87,11 @@
                 {{ tag }}
               </span>
               <span v-if="image.tags.length > 3" class="text-muted small">
-                +{{ image.tags.length - 3 }} 更多
+                +{{ image.tags.length - 3 }} more
               </span>
             </div>
 
-            <!-- 上传时间 -->
+            <!-- Upload time -->
             <small class="text-muted">
               <i class="bi bi-clock me-1"></i>
               {{ formatDate(image.uploadedAt) }}
@@ -101,7 +101,7 @@
       </div>
     </div>
 
-    <!-- 图片查看模态框 -->
+    <!-- Image view modal -->
     <div
       class="modal fade"
       id="imageModal"
@@ -126,9 +126,9 @@
               class="img-fluid rounded"
             />
             
-            <!-- 详细信息 -->
+            <!-- Detailed information -->
             <div v-if="selectedImage" class="mt-3 text-start">
-              <h6>识别结果：</h6>
+              <h6>Recognition Results:</h6>
               <div v-if="selectedImage.predictions && selectedImage.predictions.length > 0">
                 <div
                   v-for="(prediction, index) in selectedImage.predictions"
@@ -141,9 +141,9 @@
                   </span>
                 </div>
               </div>
-              <p v-else class="text-muted">暂无识别结果</p>
+              <p v-else class="text-muted">No recognition results available</p>
 
-              <h6 class="mt-3">标签：</h6>
+              <h6 class="mt-3">Tags:</h6>
               <div v-if="selectedImage.tags && selectedImage.tags.length > 0">
                 <span
                   v-for="tag in selectedImage.tags"
@@ -153,14 +153,14 @@
                   {{ tag }}
                 </span>
               </div>
-              <p v-else class="text-muted">暂无标签</p>
+              <p v-else class="text-muted">No tags available</p>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 编辑标签模态框 -->
+    <!-- Edit tags modal -->
     <div
       class="modal fade"
       id="tagModal"
@@ -170,7 +170,7 @@
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">编辑标签</h5>
+            <h5 class="modal-title">Edit Tags</h5>
             <button
               type="button"
               class="btn-close"
@@ -179,13 +179,13 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="tagInput" class="form-label">标签（用逗号分隔）</label>
+              <label for="tagInput" class="form-label">Tags (separated by commas)</label>
               <textarea
                 id="tagInput"
                 class="form-control"
                 rows="3"
                 v-model="tagInput"
-                placeholder="例如：红色鸟类, 小型鸟, 花园鸟"
+                placeholder="Example: red bird, small bird, garden bird"
               ></textarea>
             </div>
           </div>
@@ -195,7 +195,7 @@
               class="btn btn-secondary"
               data-bs-dismiss="modal"
             >
-              取消
+              Cancel
             </button>
             <button
               type="button"
@@ -204,7 +204,7 @@
               :disabled="updatingTags"
             >
               <span v-if="updatingTags" class="spinner-border spinner-border-sm me-2"></span>
-              保存
+              Save
             </button>
           </div>
         </div>
@@ -229,11 +229,11 @@ export default {
     },
     emptyMessage: {
       type: String,
-      default: '暂无图片'
+      default: 'No images'
     },
     emptySubMessage: {
       type: String,
-      default: '上传一些图片来开始识别鸟类吧！'
+      default: 'Upload some images to start recognizing birds!'
     },
     showUploadButton: {
       type: Boolean,
@@ -282,14 +282,14 @@ export default {
       }
     },
     confirmDelete(image) {
-      if (confirm(`确定要删除 "${image.filename}" 吗？此操作无法撤销。`)) {
+      if (confirm(`Are you sure you want to delete "${image.filename}"? This action cannot be undone.`)) {
         this.$emit('delete-image', image.id)
       }
     },
     formatDate(dateString) {
       if (!dateString) return ''
       const date = new Date(dateString)
-      return date.toLocaleDateString('zh-CN', {
+      return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',

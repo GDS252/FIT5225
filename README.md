@@ -1,81 +1,81 @@
-# 鸟类识别系统 - 前端应用
+# Bird Recognition System - Frontend Application
 
-这是一个基于Vue.js和Bootstrap构建的鸟类识别系统前端应用，集成了AWS Cognito用户认证和API Gateway后端服务。
+This is a Vue.js and Bootstrap-based frontend application for a bird recognition system, integrated with AWS Cognito user authentication and API Gateway backend services.
 
-## 功能特性
+## Features
 
-### 🔐 用户认证
-- 用户注册和邮箱验证
-- 安全登录/登出
-- 基于AWS Cognito的身份验证
+### 🔐 User Authentication
+- User registration and email verification
+- Secure login/logout
+- AWS Cognito-based identity authentication
 
-### 📸 图片管理
-- 支持拖拽上传多张图片
-- 实时上传进度显示
-- 图片预览和管理
-- 支持JPG、PNG、GIF格式
+### 📸 Image Management
+- Drag and drop upload for multiple images
+- Real-time upload progress display
+- Image preview and management
+- Support for JPG, PNG, GIF formats
 
-### 🤖 AI识别
-- 自动鸟类品种识别
-- 置信度评分显示
-- 识别结果可视化
+### 🤖 AI Recognition
+- Automatic bird species recognition
+- Confidence score display
+- Recognition result visualization
 
-### 🏷️ 标签系统
-- 自定义图片标签
-- 标签编辑和管理
-- 基于标签的搜索
+### 🏷️ Tag System
+- Custom image tagging
+- Tag editing and management
+- Tag-based search
 
-### 🔍 搜索功能
-- 关键词搜索
-- 标签过滤
-- 时间范围筛选
-- 多条件组合搜索
+### 🔍 Search Functionality
+- Keyword search
+- Tag filtering
+- Time range filtering
+- Multi-condition combined search
 
-## 技术栈
+## Tech Stack
 
-- **前端框架**: Vue.js 3
-- **UI框架**: Bootstrap 5
-- **路由**: Vue Router 4
-- **HTTP客户端**: Axios
-- **AWS集成**: AWS Amplify
-- **构建工具**: Vite
-- **图标**: Bootstrap Icons
+- **Frontend Framework**: Vue.js 3
+- **UI Framework**: Bootstrap 5
+- **Routing**: Vue Router 4
+- **HTTP Client**: Axios
+- **AWS Integration**: AWS Amplify
+- **Build Tool**: Vite
+- **Icons**: Bootstrap Icons
 
-## 项目结构
+## Project Structure
 
 ```
 src/
-├── components/          # 可复用组件
-│   ├── AppHeader.vue   # 应用头部导航
-│   └── ImageGrid.vue   # 图片网格展示
-├── views/              # 页面组件
-│   ├── LoginView.vue   # 登录页面
-│   ├── RegisterView.vue # 注册页面
-│   ├── DashboardView.vue # 主仪表板
-│   └── UploadView.vue  # 文件上传页面
-├── router/             # 路由配置
-│   └── index.js        # 路由定义和守卫
-├── aws-exports.js      # AWS配置文件
-├── App.vue            # 根组件
-└── main.js            # 应用入口
+├── components/          # Reusable components
+│   ├── AppHeader.vue   # Application header navigation
+│   └── ImageGrid.vue   # Image grid display
+├── views/              # Page components
+│   ├── LoginView.vue   # Login page
+│   ├── RegisterView.vue # Registration page
+│   ├── DashboardView.vue # Main dashboard
+│   └── UploadView.vue  # File upload page
+├── router/             # Routing configuration
+│   └── index.js        # Route definitions and guards
+├── aws-exports.js      # AWS configuration file
+├── App.vue            # Root component
+└── main.js            # Application entry point
 ```
 
-## 安装和运行
+## Installation and Setup
 
-### 1. 安装依赖
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-### 2. 配置AWS服务
-编辑 `src/aws-exports.js` 文件，更新以下配置：
+### 2. Configure AWS Services
+Edit the `src/aws-exports.js` file and update the following configuration:
 
 ```javascript
 const awsconfig = {
   Auth: {
-    region: 'your-aws-region',                    // 您的AWS区域
-    userPoolId: 'your-cognito-user-pool-id',     // Cognito用户池ID
-    userPoolWebClientId: 'your-app-client-id',   // 应用客户端ID
+    region: 'your-aws-region',                    // Your AWS region
+    userPoolId: 'your-cognito-user-pool-id',     // Cognito User Pool ID
+    userPoolWebClientId: 'your-app-client-id',   // App Client ID
     // ...
   },
   API: {
@@ -89,103 +89,103 @@ const awsconfig = {
   },
   Storage: {
     AWSS3: {
-      bucket: 'your-s3-bucket-name',             // S3存储桶名称
+      bucket: 'your-s3-bucket-name',             // S3 bucket name
       region: 'your-aws-region'
     }
   }
 }
 ```
 
-### 3. 启动开发服务器
+### 3. Start Development Server
 ```bash
 npm run dev
 ```
 
-应用将在 `http://localhost:5173` 启动。
+The application will start at `http://localhost:5173`.
 
-### 4. 构建生产版本
+### 4. Build for Production
 ```bash
 npm run build
 ```
 
-## 页面说明
+## Page Descriptions
 
-### 登录页面 (`/login`)
-- 用户邮箱和密码登录
-- 响应式设计，支持移动端
-- 错误处理和用户反馈
+### Login Page (`/login`)
+- User email and password login
+- Responsive design with mobile support
+- Error handling and user feedback
 
-### 注册页面 (`/register`)
-- 新用户注册
-- 邮箱验证流程
-- 密码强度验证
+### Registration Page (`/register`)
+- New user registration
+- Email verification process
+- Password strength validation
 
-### 主仪表板 (`/`)
-- 图片统计概览
-- 搜索和过滤功能
-- 图片网格展示
-- 标签编辑和删除操作
+### Main Dashboard (`/`)
+- Image statistics overview
+- Search and filter functionality
+- Image grid display
+- Tag editing and deletion operations
 
-### 上传页面 (`/upload`)
-- 拖拽上传支持
-- 批量文件处理
-- 实时上传进度
-- 文件格式验证
+### Upload Page (`/upload`)
+- Drag and drop upload support
+- Batch file processing
+- Real-time upload progress
+- File format validation
 
-## API集成
+## API Integration
 
-应用与后端API的集成点：
+Application integration points with backend APIs:
 
-- `POST /files` - 获取上传预签名URL
-- `GET /files` - 获取用户文件列表
-- `POST /query/search` - 搜索文件
-- `POST /tags/update` - 更新文件标签
-- `POST /admin/files/delete` - 删除文件
-- `POST /files/process` - 触发文件处理
+- `POST /files` - Get upload presigned URL
+- `GET /files` - Get user file list
+- `POST /query/search` - Search files
+- `POST /tags/update` - Update file tags
+- `POST /admin/files/delete` - Delete files
+- `POST /files/process` - Trigger file processing
 
-## 路由守卫
+## Route Guards
 
-应用使用Vue Router守卫来保护需要认证的页面：
-- 未登录用户访问受保护页面会重定向到登录页
-- 已登录用户访问登录/注册页会重定向到主页
+The application uses Vue Router guards to protect authenticated pages:
+- Unauthenticated users accessing protected pages are redirected to login
+- Authenticated users accessing login/register pages are redirected to home
 
-## 响应式设计
+## Responsive Design
 
-应用完全支持响应式设计：
-- 移动端优化的界面
-- 触摸友好的交互
-- 自适应布局
+The application fully supports responsive design:
+- Mobile-optimized interface
+- Touch-friendly interactions
+- Adaptive layout
 
-## 浏览器支持
+## Browser Support
 
-- Chrome (推荐)
+- Chrome (Recommended)
 - Firefox
 - Safari
 - Edge
 
-## 开发注意事项
+## Development Notes
 
-1. **AWS配置**: 确保正确配置AWS服务凭证
-2. **CORS设置**: API Gateway需要正确配置CORS
-3. **文件大小**: 默认限制单文件10MB
-4. **图片格式**: 支持常见图片格式 (JPG, PNG, GIF)
+1. **AWS Configuration**: Ensure proper AWS service credentials configuration
+2. **CORS Settings**: API Gateway needs proper CORS configuration
+3. **File Size**: Default limit of 10MB per file
+4. **Image Formats**: Supports common image formats (JPG, PNG, GIF)
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **登录失败**
-   - 检查AWS Cognito配置
-   - 确认用户池和应用客户端设置
+1. **Login Failure**
+   - Check AWS Cognito configuration
+   - Verify User Pool and App Client settings
 
-2. **上传失败**
-   - 检查S3存储桶权限
-   - 确认API Gateway配置
+2. **Upload Failure**
+   - Check S3 bucket permissions
+   - Verify API Gateway configuration
 
-3. **图片不显示**
-   - 检查S3存储桶的公共访问设置
-   - 确认CloudFront配置（如果使用）
+3. **Images Not Displaying**
+   - Check S3 bucket public access settings
+   - Verify CloudFront configuration (if used)
 
-## 许可证
+## License
 
 MIT License

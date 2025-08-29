@@ -2,8 +2,8 @@
 import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-// !!重要!! 将 baseURL 替换为您 API Gateway 部署后获得的"调用 URL"
-// 例如: 'https://xxxxxx.execute-api.ap-southeast-2.amazonaws.com/prod'
+// !!IMPORTANT!! Replace baseURL with the "Invoke URL" you get after deploying your API Gateway
+// Example: 'https://xxxxxx.execute-api.ap-southeast-2.amazonaws.com/prod'
 const apiClient = axios.create({
   baseURL: 'https://oktjqc9h7i.execute-api.ap-southeast-2.amazonaws.com/stage1',
   timeout: 30000, // 30 seconds timeout
@@ -12,13 +12,13 @@ const apiClient = axios.create({
   }
 });
 
-// 创建一个请求拦截器
+// Create a request interceptor
 apiClient.interceptors.request.use(async (config) => {
   try {
-    // 从 Amplify 获取当前用户的会话
+    // Get current user session from Amplify
     const { idToken } = (await fetchAuthSession()).tokens ?? {};
     if (idToken) {
-      // 如果令牌存在，将其添加到 Authorization 请求头中
+      // If token exists, add it to Authorization header
       config.headers.Authorization = `Bearer ${idToken.toString()}`;
       console.log('API request with authentication token');
     } else {
@@ -33,7 +33,7 @@ apiClient.interceptors.request.use(async (config) => {
   return Promise.reject(error);
 });
 
-// 响应拦截器
+// Response interceptor
 apiClient.interceptors.response.use(
   (response) => {
     return response;
@@ -41,7 +41,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       console.error('Unauthorized request - redirecting to login');
-      // 可以在这里处理全局的未授权错误
+      // You can handle global unauthorized errors here
     }
     return Promise.reject(error);
   }

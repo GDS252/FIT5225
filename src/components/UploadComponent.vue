@@ -115,6 +115,7 @@ const handleUpload = async (options) => {
     console.log('Starting upload for file:', file.name)
 
     // Step 1: Get presigned URL from backend
+    // Backend will prepare S3 upload URL and register file metadata
     const presignResponse = await apiClient.post('/files', {
       fileName: file.name,
       fileType: file.type,
@@ -126,7 +127,9 @@ const handleUpload = async (options) => {
 
     const { url, fields, fileId } = presignResponse.data
 
-    // Step 2: Upload file to S3 using presigned URL
+    // Step 2: Upload file directly to S3 using presigned URL
+    // Once uploaded, S3 will automatically trigger backend processing (SNS -> Lambda)
+    // No manual notification needed - the system is fully automated
     const formData = new FormData()
     
     // Add all fields from presigned URL
@@ -151,20 +154,8 @@ const handleUpload = async (options) => {
     })
 
     console.log('File uploaded to S3 successfully:', file.name)
-    fileItem.progress = 95
-
-    // Step 3: Notify backend that upload is complete (optional)
-    try {
-      await apiClient.post('/files/process', {
-        fileId: fileId,
-        fileName: file.name
-      })
-      console.log('Backend notified of successful upload')
-    } catch (processError) {
-      console.warn('Failed to notify backend, but upload was successful:', processError)
-    }
-
-    // Mark as complete
+    
+    // Mark as complete - backend will automatically process via S3 trigger
     fileItem.progress = 100
     fileItem.status = 'success'
     

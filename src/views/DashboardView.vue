@@ -132,6 +132,14 @@
                       >
                         Show All
                       </button>
+                      <button
+                        type="button"
+                        class="btn btn-warning btn-sm ms-2"
+                        @click="testS3Access"
+                        title="Test S3 bucket access and CORS configuration"
+                      >
+                        🧪 Test S3
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -504,11 +512,62 @@ const handleDeleteImage = async (imageId) => {
       ElMessage.error('Failed to delete image. Please try again.');
     }
   }
-};
+  };
+
+  // Test S3 CORS and access configuration
+  const testS3Access = async () => {
+    console.log('🧪 Testing S3 bucket access and CORS configuration...');
+    
+    const testUrls = [
+      'https://birdtag-media-uploads-2025-birdtag-laobukepo.s3.amazonaws.com/peacocks_2.jpg',
+      'https://birdtag-media-uploads-2025-birdtag-laobukepo.s3.amazonaws.com/peacocks_3.jpg',
+      'https://birdtag-media-thumbnails-laobukepo.s3.amazonaws.com/thumb_peacocks_2.jpg',
+      'https://birdtag-media-thumbnails-laobukepo.s3.amazonaws.com/thumb_peacocks_3.jpg'
+    ];
+
+    for (const url of testUrls) {
+      try {
+        console.log(`\n🔍 Testing: ${url}`);
+        
+        // Test direct fetch
+        const response = await fetch(url, { 
+          method: 'HEAD',
+          mode: 'cors',
+          cache: 'no-cache'
+        });
+        
+        console.log(`✅ Status: ${response.status}`);
+        console.log(`✅ Headers:`, [...response.headers.entries()]);
+        
+        if (response.ok) {
+          console.log(`✅ ${url} - ACCESSIBLE`);
+        } else {
+          console.log(`❌ ${url} - STATUS ${response.status}`);
+        }
+      } catch (error) {
+        console.log(`❌ ${url} - ERROR:`, error.message);
+        
+        // Additional debugging for CORS errors
+        if (error.message.includes('CORS')) {
+          console.log(`🚨 CORS ISSUE DETECTED for ${url}`);
+          console.log('📋 Required Actions:');
+          console.log('1. Check S3 bucket CORS configuration');
+          console.log('2. Verify bucket policy allows public read');
+          console.log('3. Ensure Block Public Access is disabled');
+        }
+      }
+    }
+    
+    console.log('\n🏁 S3 access test completed. Check results above.');
+  };
 
 // Lifecycle
 onMounted(() => {
   loadAllImages();
+  // Automatically test S3 access when page loads
+  setTimeout(() => {
+    testS3Access();
+  }, 2000);
 });
 </script>
 

@@ -327,9 +327,15 @@ const deleteUpload = async (upload) => {
 
     console.log('Deleting upload:', upload.id, uploadUrl);
     
+    // Extract filename from URL for backend API
+    // Backend expects just the filename, not the full URL
+    const filename = uploadUrl.split('/').pop();
+    console.log('Extracted filename:', filename);
+    
     // Call backend API to delete file
+    console.log('Sending delete request with payload:', { urls: [filename] });
     await apiClient.post('/admin/files', {
-      urls: [uploadUrl]
+      urls: [filename]
     });
     
     ElMessage.success('File deleted successfully');

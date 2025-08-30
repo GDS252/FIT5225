@@ -308,6 +308,19 @@ const loadAllImages = async () => {
           }
         };
         console.log('Processed file result:', processedFile);
+        console.log('Image URL for display:', processedFile.url);
+        console.log('Thumbnail URL for display:', processedFile.thumbnailUrl);
+        
+        // Test if image URLs are accessible
+        if (processedFile.url) {
+          fetch(processedFile.url, { method: 'HEAD' })
+            .then(response => {
+              console.log(`Image ${processedFile.filename} URL status:`, response.status, response.ok ? '✅' : '❌');
+            })
+            .catch(error => {
+              console.log(`Image ${processedFile.filename} URL error:`, error.message, '❌');
+            });
+        }
         return processedFile;
       });
     } else {
@@ -480,7 +493,9 @@ const handleDeleteImage = async (imageId) => {
     
     // Reload data from backend to get updated list
     console.log('Reloading images from backend after deletion...');
+    console.log('Images count before reload:', images.value.length);
     await loadAllImages();
+    console.log('Images count after reload:', images.value.length);
     console.log('Images reloaded successfully after deletion');
     
   } catch (error) {

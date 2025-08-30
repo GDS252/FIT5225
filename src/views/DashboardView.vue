@@ -135,10 +135,10 @@
                       <button
                         type="button"
                         class="btn btn-warning btn-sm ms-2"
-                        @click="testS3Access"
-                        title="Test S3 bucket access and CORS configuration"
+                        @click="testUploadFlow"
+                        title="Test complete upload flow and S3 configuration"
                       >
-                        🧪 Test S3
+                        🔬 Test Upload Flow
                       </button>
                     </div>
                   </div>
@@ -512,6 +512,43 @@ const handleDeleteImage = async (imageId) => {
       ElMessage.error('Failed to delete image. Please try again.');
     }
   }
+  };
+
+  // Test upload flow and S3 bucket configuration
+  const testUploadFlow = async () => {
+    console.log('🔬 Testing complete upload flow and S3 configuration...');
+    
+    try {
+      // Test 1: Backend API connectivity
+      console.log('\n📡 Testing backend API connectivity...');
+      const apiResponse = await apiClient.get('/files');
+      console.log('✅ Backend API accessible:', apiResponse.status);
+      console.log('📊 Current files in database:', apiResponse.data?.length || 0);
+      
+      // Test 2: Presigned URL generation
+      console.log('\n🔑 Testing presigned URL generation...');
+      const presignResponse = await apiClient.post('/files', {
+        fileName: 'test-cors-check.jpg',
+        fileType: 'image/jpeg',
+        fileSize: 1024
+      });
+      console.log('✅ Presigned URL generated:', presignResponse.data);
+      console.log('🌐 Upload URL:', presignResponse.data?.url);
+      console.log('📝 Fields:', presignResponse.data?.fields);
+      
+      // Test 3: S3 bucket access tests
+      console.log('\n🧪 Testing S3 bucket access and CORS...');
+      await testS3Access();
+      
+    } catch (error) {
+      console.error('❌ Upload flow test failed:', error);
+      console.error('📋 Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+    }
   };
 
   // Test S3 CORS and access configuration

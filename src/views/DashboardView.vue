@@ -132,14 +132,6 @@
                       >
                         Show All
                       </button>
-                      <button
-                        type="button"
-                        class="btn btn-warning btn-sm ms-2"
-                        @click="testUploadFlow"
-                        title="Test complete upload flow and S3 configuration"
-                      >
-                        🔬 Test Upload Flow
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -266,9 +258,7 @@ const loadAllImages = async () => {
     // Call the backend API to get all files
     const response = await apiClient.get('/files');
     
-    console.log('API response:', response.data);
-    console.log('API response type:', typeof response.data);
-    console.log('API response structure:', JSON.stringify(response.data, null, 2));
+    console.log('✅ Loaded images from API:', response.data?.length || 0);
     
     // Handle different response formats
     let files = [];
@@ -278,27 +268,11 @@ const loadAllImages = async () => {
       files = response.data;
     }
     
-    console.log('Files array to process:', files);
+
     
     // Transform the response to match our component structure
     if (files.length > 0) {
-      // Log first file to understand structure
-      console.log('Sample file object:', files[0]);
-      console.log('Sample file keys:', Object.keys(files[0]));
-      
       images.value = files.map(file => {
-        console.log('Processing file:', file);
-        // Log URL-related fields from backend to debug the issue
-        console.log('URL fields from backend:', {
-          'file.url': file.url,
-          'file.original_url': file.original_url,
-          'file.thumbnail_url': file.thumbnail_url,
-          'file.s3_url': file.s3_url, 
-          'file.fileUrl': file.fileUrl,
-          'file.downloadUrl': file.downloadUrl,
-          'file.thumbnailUrl': file.thumbnailUrl,
-          'file.thumbnail': file.thumbnail
-        });
         
         const processedFile = {
           id: file.id || file.fileId || file.media_id || file.filename || Math.random().toString(36),
@@ -494,8 +468,7 @@ const handleDeleteImage = async (imageId) => {
     const deleteResponse = await apiClient.post('/admin/files', {
       urls: [filename]
     });
-    console.log('Delete API response:', deleteResponse.data);
-    console.log('Delete API status:', deleteResponse.status);
+    console.log('✅ Delete successful:', deleteResponse.status);
     
     ElMessage.success('Image deleted successfully');
     
@@ -514,97 +487,9 @@ const handleDeleteImage = async (imageId) => {
   }
   };
 
-  // Test upload flow and S3 bucket configuration
-  const testUploadFlow = async () => {
-    console.log('🔬 Testing complete upload flow and S3 configuration...');
-    
-    try {
-      // Test 1: Backend API connectivity
-      console.log('\n📡 Testing backend API connectivity...');
-      const apiResponse = await apiClient.get('/files');
-      console.log('✅ Backend API accessible:', apiResponse.status);
-      console.log('📊 Current files in database:', apiResponse.data?.length || 0);
-      
-      // Test 2: Presigned URL generation
-      console.log('\n🔑 Testing presigned URL generation...');
-      const presignResponse = await apiClient.post('/files', {
-        fileName: 'test-cors-check.jpg',
-        fileType: 'image/jpeg',
-        fileSize: 1024
-      });
-      console.log('✅ Presigned URL generated:', presignResponse.data);
-      console.log('🌐 Upload URL:', presignResponse.data?.url);
-      console.log('📝 Fields:', presignResponse.data?.fields);
-      
-      // Test 3: S3 bucket access tests
-      console.log('\n🧪 Testing S3 bucket access and CORS...');
-      await testS3Access();
-      
-    } catch (error) {
-      console.error('❌ Upload flow test failed:', error);
-      console.error('📋 Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-    }
-  };
-
-  // Test S3 CORS and access configuration
-  const testS3Access = async () => {
-    console.log('🧪 Testing S3 bucket access and CORS configuration...');
-    
-    const testUrls = [
-      'https://birdtag-media-uploads-2025-birdtag-laobukepo.s3.amazonaws.com/peacocks_2.jpg',
-      'https://birdtag-media-uploads-2025-birdtag-laobukepo.s3.amazonaws.com/peacocks_3.jpg',
-      'https://birdtag-media-thumbnails-laobukepo.s3.amazonaws.com/thumb_peacocks_2.jpg',
-      'https://birdtag-media-thumbnails-laobukepo.s3.amazonaws.com/thumb_peacocks_3.jpg'
-    ];
-
-    for (const url of testUrls) {
-      try {
-        console.log(`\n🔍 Testing: ${url}`);
-        
-        // Test direct fetch
-        const response = await fetch(url, { 
-          method: 'HEAD',
-          mode: 'cors',
-          cache: 'no-cache'
-        });
-        
-        console.log(`✅ Status: ${response.status}`);
-        console.log(`✅ Headers:`, [...response.headers.entries()]);
-        
-        if (response.ok) {
-          console.log(`✅ ${url} - ACCESSIBLE`);
-        } else {
-          console.log(`❌ ${url} - STATUS ${response.status}`);
-        }
-      } catch (error) {
-        console.log(`❌ ${url} - ERROR:`, error.message);
-        
-        // Additional debugging for CORS errors
-        if (error.message.includes('CORS')) {
-          console.log(`🚨 CORS ISSUE DETECTED for ${url}`);
-          console.log('📋 Required Actions:');
-          console.log('1. Check S3 bucket CORS configuration');
-          console.log('2. Verify bucket policy allows public read');
-          console.log('3. Ensure Block Public Access is disabled');
-        }
-      }
-    }
-    
-    console.log('\n🏁 S3 access test completed. Check results above.');
-  };
-
 // Lifecycle
 onMounted(() => {
   loadAllImages();
-  // Automatically test S3 access when page loads
-  setTimeout(() => {
-    testS3Access();
-  }, 2000);
 });
 </script>
 

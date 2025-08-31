@@ -214,8 +214,18 @@ const handleUpload = async (options) => {
       console.log('🔄 Adding fields in required order...')
       orderedFields.forEach(fieldName => {
         if (fields[fieldName]) {
-          formData.append(fieldName, fields[fieldName])
-          console.log(`✓ Added ordered field: ${fieldName} = ${fields[fieldName]}`)
+          let fieldValue = fields[fieldName]
+          
+          // CRITICAL FIX: Override the key to use root directory only
+          if (fieldName === 'key') {
+            fieldValue = file.name  // Use just the filename, not the nested path
+            console.log(`🔧 FIXED: Overriding nested key path`)
+            console.log(`🔧 Original key: ${fields[fieldName]}`)
+            console.log(`🔧 New key: ${fieldValue}`)
+          }
+          
+          formData.append(fieldName, fieldValue)
+          console.log(`✓ Added ordered field: ${fieldName} = ${fieldValue}`)
         }
       })
       
@@ -258,6 +268,20 @@ const handleUpload = async (options) => {
     let uploadResponse
     
     console.log('🚀 Starting S3 upload...')
+    
+    // CRITICAL: Log complete request details for debugging
+    console.log('🌐 COMPLETE REQUEST ANALYSIS:')
+    console.log('🌐 Target URL:', url)
+    console.log('🌐 Request method: POST')
+    console.log('🌐 FormData entries count:', Array.from(formData.entries()).length)
+    console.log('🌐 Browser User-Agent:', navigator.userAgent)
+    console.log('🌐 Current timestamp:', new Date().toISOString())
+    
+    // Check if this might be a CORS preflight issue
+    console.log('🔍 CORS ANALYSIS:')
+    console.log('🔍 Origin:', window.location.origin)
+    console.log('🔍 Target domain:', new URL(url).hostname)
+    console.log('🔍 Cross-origin request:', window.location.hostname !== new URL(url).hostname)
     
     if (fields && Object.keys(fields).length > 0) {
       // Presigned POST URL - use FormData with fields
@@ -388,10 +412,11 @@ const handleUpload = async (options) => {
       let s3Url
       
       if (fields?.key) {
-        // Presigned POST pattern: construct URL from base + key
+        // Presigned POST pattern: construct URL from base + ACTUAL key used (filename only)
         const baseUrl = url.split('?')[0].replace(/\/$/, '') // Remove trailing slash and query params
-        s3Url = `${baseUrl}/${fields.key}`
-        console.log('🔗 Constructed S3 URL from base + key:', s3Url)
+        s3Url = `${baseUrl}/${file.name}`  // Use actual filename, not original nested key
+        console.log('🔗 Constructed S3 URL from base + filename:', s3Url)
+        console.log('🔗 Using filename instead of original key for root directory upload')
       } else {
         // Direct presigned URL pattern
         s3Url = url.split('?')[0] // Remove query parameters

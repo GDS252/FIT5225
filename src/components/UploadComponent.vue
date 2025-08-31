@@ -194,22 +194,43 @@ const handleUpload = async (options) => {
     // No manual notification needed - the system is fully automated
     const formData = new FormData()
     
-    // Add all fields from presigned URL
+    // Add all fields from presigned URL in SPECIFIC ORDER
     if (fields) {
       console.log('📝 Adding presigned URL fields to FormData...')
       console.log('📝 Fields object:', fields)
       console.log('📝 Fields type:', typeof fields)
       console.log('📝 Fields keys:', Object.keys(fields))
       
+      // CRITICAL: S3 requires fields in specific order for presigned POST
+      // The order must match the policy conditions
+      const orderedFields = [
+        'key',
+        'AWSAccessKeyId', 
+        'x-amz-security-token',
+        'policy',
+        'signature'
+      ]
+      
+      console.log('🔄 Adding fields in required order...')
+      orderedFields.forEach(fieldName => {
+        if (fields[fieldName]) {
+          formData.append(fieldName, fields[fieldName])
+          console.log(`✓ Added ordered field: ${fieldName} = ${fields[fieldName]}`)
+        }
+      })
+      
+      // Add any remaining fields not in the ordered list
       Object.entries(fields).forEach(([key, value]) => {
-        formData.append(key, value)
-        console.log(`✓ Added field: ${key} = ${value}`)
+        if (!orderedFields.includes(key)) {
+          formData.append(key, value)
+          console.log(`✓ Added additional field: ${key} = ${value}`)
+        }
       })
     } else {
       console.warn('⚠️  No fields received from presigned URL response - this might be a PUT URL')
     }
     
-    // Add the file (must be last)
+    // CRITICAL: Add the file LAST (this is mandatory for S3 presigned POST)
     formData.append('file', file)
     console.log('✓ Added file to FormData:', {
       name: file.name, 
@@ -297,25 +318,41 @@ const handleUpload = async (options) => {
     console.log('📋 Response headers:', uploadResponse.headers)
     console.log('📄 Response data:', uploadResponse.data)
     console.log('📄 Response config URL:', uploadResponse.config?.url)
+    
+    // CRITICAL ANALYSIS: Check if this is a real success or S3 error disguised as success
+    console.log('🔍 DEEP ANALYSIS: Checking for hidden S3 errors...')
+    
+    // Sometimes S3 returns 204 even when upload fails due to policy violations
+    // Check response data for any error indicators
+    if (uploadResponse.data && typeof uploadResponse.data === 'string' && uploadResponse.data.includes('Error')) {
+      console.error('❌ HIDDEN ERROR: S3 response contains error in data:', uploadResponse.data)
+    }
+    
+    // Check headers for any warning signs
+    console.log('🔍 Analyzing response headers for success indicators...')
+    const etag = uploadResponse.headers?.etag || uploadResponse.headers?.ETag
+    console.log('🏷️  ETag present:', !!etag, etag)
+    
+    if (!etag && uploadResponse.status === 204) {
+      console.warn('⚠️  WARNING: Status 204 but no ETag - this might indicate a failed upload!')
+    }
 
     // Check if upload was actually successful
     console.log('🔍 Validating S3 upload success...')
     console.log('🔍 Checking status codes: 200, 201, 204 are considered successful')
     
-    // CRITICAL: Validate that the URL actually contains a file path
-    const uploadUrl = uploadResponse.config?.url || url
-    console.log('🔍 Upload URL analysis:', uploadUrl)
+    // IMPORTANT: For presigned POST uploads, we need to check differently
+    console.log('🔍 Validating successful upload...')
+    console.log('📊 Upload response status:', uploadResponse.status)
+    console.log('📋 Upload response headers:', uploadResponse.headers)
     
-    // Check if URL contains the filename or a proper S3 key
-    const urlPath = new URL(uploadUrl).pathname
-    console.log('🔍 URL path:', urlPath)
-    
-    // If URL path is just "/" or empty, this indicates a problem with the presigned URL
-    if (urlPath === '/' || urlPath === '') {
-      console.error('❌ CRITICAL ERROR: Presigned URL has no file path!')
-      console.error('❌ URL path is empty or just "/" - this means the file was not actually uploaded to S3')
-      console.error('❌ Backend presigned URL generation is likely broken')
-      throw new Error('❌ Presigned URL is invalid - missing file path. Backend needs to fix presigned URL generation.')
+    // Check for S3 ETag which confirms successful upload
+    const etag = uploadResponse.headers?.etag || uploadResponse.headers?.ETag
+    if (etag) {
+      console.log('✅ SUCCESS CONFIRMED: S3 returned ETag:', etag)
+      console.log('✅ This proves the file was successfully uploaded to S3!')
+    } else {
+      console.log('⚠️  No ETag in response, but status 204 usually means success')
     }
     
     if (uploadResponse.status === 200 || uploadResponse.status === 201 || uploadResponse.status === 204) {

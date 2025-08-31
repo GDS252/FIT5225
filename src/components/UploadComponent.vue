@@ -103,7 +103,17 @@ const handleUpload = async (options) => {
   const file = options.file
   const fileItem = fileList.value.find(item => item.uid === file.uid)
   
+  console.log('🚀 === UPLOAD DEBUGGING START ===')
+  console.log('📁 File details:', {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    uid: file.uid,
+    lastModified: file.lastModified
+  })
+  
   if (!fileItem) {
+    console.error('❌ File not found in upload list')
     ElMessage.error('File not found in upload list')
     return
   }
@@ -112,21 +122,65 @@ const handleUpload = async (options) => {
     fileItem.status = 'uploading'
     fileItem.progress = 10
 
-    console.log('Starting upload for file:', file.name)
+    console.log('🎯 Starting upload process for file:', file.name)
+    console.log('📤 Step 1: Requesting presigned URL from backend...')
 
     // Step 1: Get presigned URL from backend
     // Backend will prepare S3 upload URL and register file metadata
-    const presignResponse = await apiClient.post('/files', {
+    const requestPayload = {
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size
-    })
+    }
+    
+    console.log('📋 Request payload:', requestPayload)
+    console.log('🌐 Making request to /files endpoint...')
+    
+    const presignResponse = await apiClient.post('/files', requestPayload)
 
-    console.log('Presigned URL response:', presignResponse.data)
+    console.log('✅ Presigned URL response received!')
+    console.log('📄 Full response data:', presignResponse.data)
+    console.log('🔗 URL:', presignResponse.data.url)
+    console.log('📝 Fields:', presignResponse.data.fields)
+    console.log('🆔 File ID:', presignResponse.data.fileId)
+    console.log('📊 Response status:', presignResponse.status)
+    console.log('📊 Response headers:', presignResponse.headers)
+    
     fileItem.progress = 20
 
-    const { url, fields, fileId } = presignResponse.data
+    // Extract data with fallback property names
+    const url = presignResponse.data.url || presignResponse.data.uploadUrl || presignResponse.data.presignedUrl
+    const fields = presignResponse.data.fields || presignResponse.data.formData || {}
+    const fileId = presignResponse.data.fileId || presignResponse.data.media_id || presignResponse.data.id || presignResponse.data.file_id
+    
+    console.log('📝 Extracted values:', { url, fields, fileId })
+    
+    // Validate critical response data
+    if (!url) {
+      console.error('❌ No upload URL found in response data:', presignResponse.data)
+      throw new Error('❌ No upload URL received from backend')
+    }
+    
+    console.log('🔍 Validating presigned URL response...')
+    console.log('✓ URL exists:', !!url)
+    console.log('✓ Fields exists:', !!fields)
+    console.log('✓ FileID exists:', !!fileId)
 
+    console.log('📤 Step 2: Preparing S3 upload...')
+    
+    // URGENT: Force detection of the presigned URL issue
+    console.log('🚨 URGENT CHECK: Is presigned URL valid?')
+    console.log('🚨 URL:', url)
+    console.log('🚨 URL ends with /:', url.endsWith('/'))
+    
+    if (url.endsWith('/')) {
+      console.error('🚨🚨🚨 CONFIRMED: PRESIGNED URL IS INVALID!')
+      console.error('🚨 This explains why files are not appearing in S3!')
+      console.error('🚨 Backend must fix presigned URL to include filename!')
+      alert('❌ Upload Failed: Presigned URL is invalid (ends with /). Backend needs to be fixed!')
+      throw new Error('❌ BACKEND ISSUE: Presigned URL ends with / - missing filename. This prevents successful S3 upload.')
+    }
+    
     // Step 2: Upload file directly to S3 using presigned URL
     // Once uploaded, S3 will automatically trigger backend processing (SNS -> Lambda)
     // No manual notification needed - the system is fully automated
@@ -134,47 +188,200 @@ const handleUpload = async (options) => {
     
     // Add all fields from presigned URL
     if (fields) {
+      console.log('📝 Adding presigned URL fields to FormData...')
+      console.log('📝 Fields object:', fields)
+      console.log('📝 Fields type:', typeof fields)
+      console.log('📝 Fields keys:', Object.keys(fields))
+      
       Object.entries(fields).forEach(([key, value]) => {
         formData.append(key, value)
+        console.log(`✓ Added field: ${key} = ${value}`)
       })
+    } else {
+      console.warn('⚠️  No fields received from presigned URL response - this might be a PUT URL')
     }
     
     // Add the file (must be last)
     formData.append('file', file)
+    console.log('✓ Added file to FormData:', {
+      name: file.name, 
+      type: file.type, 
+      size: file.size,
+      lastModified: new Date(file.lastModified).toISOString()
+    })
+    
+    // Debug: Log all FormData entries
+    console.log('📋 Complete FormData contents:')
+    let formDataEntries = []
+    for (let [key, value] of formData.entries()) {
+      const logValue = key === 'file' ? `[File: ${value.name}, ${value.size} bytes]` : value
+      console.log(`  ${key}: ${logValue}`)
+      formDataEntries.push({ key, value: logValue })
+    }
+    console.log('📋 FormData summary:', formDataEntries)
+    
+    console.log('🌐 Uploading to S3 URL:', url)
+    console.log('🌐 URL domain:', new URL(url).hostname)
+    console.log('🌐 URL path:', new URL(url).pathname)
 
     // Upload to S3 with progress tracking
-    await axios.post(url, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 80) / progressEvent.total) + 20
-        fileItem.progress = Math.min(progress, 95)
-      }
-    })
+    // Check if this is a presigned POST URL (with fields) or presigned PUT URL (direct upload)
+    let uploadResponse
+    
+    console.log('🚀 Starting S3 upload...')
+    
+    if (fields && Object.keys(fields).length > 0) {
+      // Presigned POST URL - use FormData with fields
+      console.log('📮 Using presigned POST upload with FormData and fields')
+      console.log('📮 POST request details:', {
+        url: url,
+        method: 'POST',
+        contentType: 'multipart/form-data',
+        formDataFields: Object.keys(fields).length
+      })
+      
+      uploadResponse = await axios.post(url, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 80) / progressEvent.total) + 20
+          fileItem.progress = Math.min(progress, 95)
+          console.log(`📊 Upload progress: ${progressEvent.loaded}/${progressEvent.total} bytes (${Math.round(progressEvent.loaded/progressEvent.total*100)}%)`)
+        },
+        timeout: 60000, // 60 second timeout
+        validateStatus: (status) => {
+          console.log(`📊 S3 response status: ${status}`)
+          return status >= 200 && status < 400; // Accept 2xx and 3xx responses
+        }
+      })
+    } else {
+      // Presigned PUT URL - upload file directly
+      console.log('📤 Using presigned PUT upload (direct file)')
+      console.log('📤 PUT request details:', {
+        url: url,
+        method: 'PUT',
+        contentType: file.type,
+        fileSize: file.size
+      })
+      
+      uploadResponse = await axios.put(url, file, {
+        headers: {
+          'Content-Type': file.type
+        },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 80) / progressEvent.total) + 20
+          fileItem.progress = Math.min(progress, 95)
+          console.log(`📊 Upload progress: ${progressEvent.loaded}/${progressEvent.total} bytes (${Math.round(progressEvent.loaded/progressEvent.total*100)}%)`)
+        },
+        timeout: 60000, // 60 second timeout
+        validateStatus: (status) => {
+          console.log(`📊 S3 response status: ${status}`)
+          return status >= 200 && status < 400; // Accept 2xx and 3xx responses
+        }
+      })
+    }
+    
+    console.log('✅ S3 upload response received!')
+    console.log('📄 Full upload response:', uploadResponse)
+    console.log('📊 Response status:', uploadResponse.status)
+    console.log('📊 Response statusText:', uploadResponse.statusText)
+    console.log('📋 Response headers:', uploadResponse.headers)
+    console.log('📄 Response data:', uploadResponse.data)
+    console.log('📄 Response config URL:', uploadResponse.config?.url)
 
-    console.log('File uploaded to S3 successfully:', file.name)
+    // Check if upload was actually successful
+    console.log('🔍 Validating S3 upload success...')
+    console.log('🔍 Checking status codes: 200, 201, 204 are considered successful')
     
-    // Mark as complete - backend will automatically process via S3 trigger
-    fileItem.progress = 100
-    fileItem.status = 'success'
+    // CRITICAL: Validate that the URL actually contains a file path
+    const uploadUrl = uploadResponse.config?.url || url
+    console.log('🔍 Upload URL analysis:', uploadUrl)
     
-    ElMessage.success(`${file.name} uploaded successfully!`)
-    emit('upload-success', { file, fileId })
+    // Check if URL contains the filename or a proper S3 key
+    const urlPath = new URL(uploadUrl).pathname
+    console.log('🔍 URL path:', urlPath)
+    
+    // If URL path is just "/" or empty, this indicates a problem with the presigned URL
+    if (urlPath === '/' || urlPath === '') {
+      console.error('❌ CRITICAL ERROR: Presigned URL has no file path!')
+      console.error('❌ URL path is empty or just "/" - this means the file was not actually uploaded to S3')
+      console.error('❌ Backend presigned URL generation is likely broken')
+      throw new Error('❌ Presigned URL is invalid - missing file path. Backend needs to fix presigned URL generation.')
+    }
+    
+    if (uploadResponse.status === 200 || uploadResponse.status === 201 || uploadResponse.status === 204) {
+      console.log('🎉 SUCCESS: File uploaded to S3 successfully!')
+      console.log('🎉 Final status:', uploadResponse.status)
+      console.log('🎉 File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        fileId: fileId
+      })
+      
+      // Construct the S3 URL properly
+      let s3Url = url.split('?')[0] // Remove query parameters to get clean S3 URL
+      
+      // If URL doesn't include the filename, append it
+      if (!s3Url.endsWith(file.name)) {
+        // Check if the URL ends with a slash
+        if (!s3Url.endsWith('/')) {
+          s3Url += '/'
+        }
+        s3Url += file.name
+      }
+      
+      console.log('🔗 Constructed S3 file URL:', s3Url)
+      console.log('🔗 S3 bucket from URL:', new URL(s3Url).hostname)
+      console.log('🔗 S3 key from URL:', new URL(s3Url).pathname)
+      
+      // Mark as complete - backend will automatically process via S3 trigger
+      fileItem.progress = 100
+      fileItem.status = 'success'
+      
+      console.log('📡 File should now be available in S3 at:', s3Url)
+      console.log('📡 Backend should automatically process this file via S3 event triggers')
+      
+      ElMessage.success(`${file.name} uploaded successfully!`)
+      emit('upload-success', { file, fileId, s3Url })
+    } else {
+      console.error('❌ UPLOAD FAILED: Unexpected status code')
+      throw new Error(`S3 upload failed with status: ${uploadResponse.status} ${uploadResponse.statusText}`)
+    }
 
     // Remove from list after successful upload
     setTimeout(() => {
       removeFile(fileItem)
     }, 2000)
+    
+    console.log('🏁 === UPLOAD DEBUGGING END (SUCCESS) ===')
 
   } catch (error) {
-    console.error('Upload failed:', error)
+    console.error('💥 === UPLOAD DEBUGGING END (ERROR) ===')
+    console.error('❌ Upload failed with error:', error)
+    console.error('❌ Error type:', error.constructor.name)
+    console.error('❌ Error message:', error.message)
+    
+    if (error.response) {
+      console.error('❌ Error response status:', error.response.status)
+      console.error('❌ Error response statusText:', error.response.statusText)
+      console.error('❌ Error response headers:', error.response.headers)
+      console.error('❌ Error response data:', error.response.data)
+      console.error('❌ Error response config:', error.response.config)
+    }
+    
+    if (error.request) {
+      console.error('❌ Error request:', error.request)
+    }
+    
     fileItem.status = 'exception'
     fileItem.progress = 0
     
     let errorMessage = 'Upload failed'
     if (error.response) {
       errorMessage = `Upload failed: ${error.response.status} ${error.response.statusText}`
+      console.error('❌ Detailed error response:', error.response.data)
     } else if (error.message) {
       errorMessage = `Upload failed: ${error.message}`
     }

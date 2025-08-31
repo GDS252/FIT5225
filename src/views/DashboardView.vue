@@ -274,14 +274,38 @@ const loadAllImages = async () => {
     if (files.length > 0) {
       images.value = files.map(file => {
         
+        // Parse AI tags from backend
+        let aiData = { species: [], confidence: 0, description: '' };
+        if (file.ai_tags) {
+          try {
+            aiData = typeof file.ai_tags === 'string' ? JSON.parse(file.ai_tags) : file.ai_tags;
+            console.log('Parsed AI tags:', aiData);
+          } catch (e) {
+            console.error('Error parsing ai_tags:', e, file.ai_tags);
+          }
+        }
+
+        // Convert AI data to frontend format
+        const predictions = aiData.species && aiData.species.length > 0 ? 
+          aiData.species.map(species => ({
+            label: species,
+            confidence: aiData.confidence || 0
+          })) : 
+          (file.predictions || file.aiResults || file.analysis || []);
+
+        const tags = aiData.species && aiData.species.length > 0 ? 
+          [...aiData.species] : 
+          (file.tags || []);
+
         const processedFile = {
           id: file.id || file.fileId || file.media_id || file.filename || Math.random().toString(36),
           filename: file.filename || file.name || file.originalName || 'unknown',
           url: file.original_url || file.url || file.s3_url || file.fileUrl || file.downloadUrl || '',
           thumbnailUrl: file.thumbnail_url || file.thumbnailUrl || file.thumbnail || file.original_url || '',
           uploadedAt: file.uploadedAt || file.createdAt || file.timestamp || new Date().toISOString(),
-          predictions: file.predictions || file.aiResults || file.analysis || [],
-          tags: file.tags || [],
+          predictions: predictions,
+          tags: tags,
+          description: aiData.description || '', // For Recognition Results
           // Add debugging info for image loading issues
           originalData: {
             media_id: file.media_id,
@@ -466,6 +490,8 @@ const handleDeleteImage = async (imageId) => {
     // Call backend API to delete file
     console.log('Sending delete request with payload:', { urls: [filename] });
     const deleteResponse = await apiClient.post('/admin/files', {
+      
+      
       urls: [filename]
     });
     console.log('✅ Delete successful:', deleteResponse.status);

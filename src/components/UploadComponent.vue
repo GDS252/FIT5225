@@ -168,17 +168,25 @@ const handleUpload = async (options) => {
 
     console.log('📤 Step 2: Preparing S3 upload...')
     
-    // URGENT: Force detection of the presigned URL issue
-    console.log('🚨 URGENT CHECK: Is presigned URL valid?')
-    console.log('🚨 URL:', url)
-    console.log('🚨 URL ends with /:', url.endsWith('/'))
+    // CRITICAL ANALYSIS: Check URL and fields structure
+    console.log('🔍 ANALYZING PRESIGNED URL STRUCTURE...')
+    console.log('🔗 Base URL:', url)
+    console.log('🔗 URL ends with /:', url.endsWith('/'))
+    console.log('📝 Fields structure:', fields)
+    console.log('🗝️ S3 Key from fields:', fields?.key)
     
-    if (url.endsWith('/')) {
-      console.error('🚨🚨🚨 CONFIRMED: PRESIGNED URL IS INVALID!')
-      console.error('🚨 This explains why files are not appearing in S3!')
-      console.error('🚨 Backend must fix presigned URL to include filename!')
-      alert('❌ Upload Failed: Presigned URL is invalid (ends with /). Backend needs to be fixed!')
-      throw new Error('❌ BACKEND ISSUE: Presigned URL ends with / - missing filename. This prevents successful S3 upload.')
+    // The backend is using presigned POST with fields.key pattern
+    // This is actually CORRECT for S3 presigned POST uploads!
+    if (url.endsWith('/') && fields?.key) {
+      console.log('✅ DETECTED: Presigned POST pattern with fields.key')
+      console.log('✅ This is the CORRECT S3 upload pattern!')
+      console.log('✅ File will be uploaded to:', `${url}`)
+      console.log('✅ S3 key will be:', fields.key)
+    } else if (url.endsWith('/') && !fields?.key) {
+      console.error('❌ INVALID: URL ends with / but no key in fields!')
+      throw new Error('❌ Invalid presigned URL: missing both filename in URL and key in fields')
+    } else {
+      console.log('✅ DETECTED: Direct presigned URL (PUT pattern)')
     }
     
     // Step 2: Upload file directly to S3 using presigned URL
@@ -320,16 +328,18 @@ const handleUpload = async (options) => {
         fileId: fileId
       })
       
-      // Construct the S3 URL properly
-      let s3Url = url.split('?')[0] // Remove query parameters to get clean S3 URL
+      // Construct the final S3 URL properly based on upload pattern
+      let s3Url
       
-      // If URL doesn't include the filename, append it
-      if (!s3Url.endsWith(file.name)) {
-        // Check if the URL ends with a slash
-        if (!s3Url.endsWith('/')) {
-          s3Url += '/'
-        }
-        s3Url += file.name
+      if (fields?.key) {
+        // Presigned POST pattern: construct URL from base + key
+        const baseUrl = url.split('?')[0].replace(/\/$/, '') // Remove trailing slash and query params
+        s3Url = `${baseUrl}/${fields.key}`
+        console.log('🔗 Constructed S3 URL from base + key:', s3Url)
+      } else {
+        // Direct presigned URL pattern
+        s3Url = url.split('?')[0] // Remove query parameters
+        console.log('🔗 Using direct presigned URL:', s3Url)
       }
       
       console.log('🔗 Constructed S3 file URL:', s3Url)

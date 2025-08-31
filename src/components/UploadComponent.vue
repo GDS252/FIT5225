@@ -281,8 +281,14 @@ const handleUpload = async (options) => {
         timeout: 60000, // 60 second timeout
         validateStatus: (status) => {
           console.log(`📊 S3 response status: ${status}`)
-          return status >= 200 && status < 400; // Accept 2xx and 3xx responses
-        }
+          // CRITICAL: Accept ALL status codes to capture S3 errors
+          return true; // Let us handle all responses manually
+        },
+        // CRITICAL: Capture detailed response for debugging
+        transformResponse: [(data) => {
+          console.log('🔍 RAW S3 response data:', data)
+          return data
+        }]
       })
     } else {
       // Presigned PUT URL - upload file directly
@@ -354,7 +360,21 @@ const handleUpload = async (options) => {
       console.log('⚠️  No ETag in response, but status 204 usually means success')
     }
     
-    if (uploadResponse.status === 200 || uploadResponse.status === 201 || uploadResponse.status === 204) {
+    // CRITICAL: Check for actual S3 success vs fake success
+    console.log('🚨 CRITICAL STATUS CHECK:')
+    console.log('🚨 Response status:', uploadResponse.status)
+    console.log('🚨 Response data type:', typeof uploadResponse.data)
+    console.log('🚨 Response data content:', uploadResponse.data)
+    
+    // Check if response contains XML error (S3 returns XML errors even with 204 status sometimes)
+    if (uploadResponse.data && typeof uploadResponse.data === 'string' && uploadResponse.data.includes('<Error>')) {
+      console.error('❌ S3 RETURNED XML ERROR despite 204 status!')
+      console.error('❌ XML Error content:', uploadResponse.data)
+      throw new Error('❌ S3 upload failed: ' + uploadResponse.data)
+    }
+    
+    // Only accept true success statuses
+    if (uploadResponse.status >= 200 && uploadResponse.status < 300) {
       console.log('🎉 SUCCESS: File uploaded to S3 successfully!')
       console.log('🎉 Final status:', uploadResponse.status)
       console.log('🎉 File details:', {

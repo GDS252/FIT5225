@@ -214,18 +214,8 @@ const handleUpload = async (options) => {
       console.log('🔄 Adding fields in required order...')
       orderedFields.forEach(fieldName => {
         if (fields[fieldName]) {
-          let fieldValue = fields[fieldName]
-          
-          // CRITICAL FIX: Override the key to use root directory only
-          if (fieldName === 'key') {
-            fieldValue = file.name  // Use just the filename, not the nested path
-            console.log(`🔧 FIXED: Overriding nested key path`)
-            console.log(`🔧 Original key: ${fields[fieldName]}`)
-            console.log(`🔧 New key: ${fieldValue}`)
-          }
-          
-          formData.append(fieldName, fieldValue)
-          console.log(`✓ Added ordered field: ${fieldName} = ${fieldValue}`)
+          formData.append(fieldName, fields[fieldName])
+          console.log(`✓ Added ordered field: ${fieldName} = ${fields[fieldName]}`)
         }
       })
       
@@ -412,11 +402,10 @@ const handleUpload = async (options) => {
       let s3Url
       
       if (fields?.key) {
-        // Presigned POST pattern: construct URL from base + ACTUAL key used (filename only)
+        // Presigned POST pattern: construct URL from base + key
         const baseUrl = url.split('?')[0].replace(/\/$/, '') // Remove trailing slash and query params
-        s3Url = `${baseUrl}/${file.name}`  // Use actual filename, not original nested key
-        console.log('🔗 Constructed S3 URL from base + filename:', s3Url)
-        console.log('🔗 Using filename instead of original key for root directory upload')
+        s3Url = `${baseUrl}/${fields.key}`
+        console.log('🔗 Constructed S3 URL from base + key:', s3Url)
       } else {
         // Direct presigned URL pattern
         s3Url = url.split('?')[0] // Remove query parameters

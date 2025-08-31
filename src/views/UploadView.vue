@@ -208,20 +208,7 @@ const uploadComponent = ref(null);
 const recentUploads = ref([]);
 const loadingRecent = ref(false);
 
-const handleUploadSuccess = (data) => {
-  console.log('Upload successful:', data);
-  ElMessage.success(`${data.file.name} uploaded successfully!`);
-  
-  // Refresh recent uploads to show the new file
-  setTimeout(() => {
-    loadRecentUploads();
-  }, 2000);
-};
-
-const handleUploadError = (data) => {
-  console.error('Upload failed:', data);
-  ElMessage.error(`Failed to upload ${data.file.name}`);
-};
+// Upload event handlers moved to after loadRecentUploads function
 
 const loadRecentUploads = async () => {
   loadingRecent.value = true;

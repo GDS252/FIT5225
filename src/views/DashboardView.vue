@@ -211,13 +211,26 @@ const searchForm = reactive({
 // Computed properties
 const totalImages = computed(() => images.value.length);
 
-const identifiedImages = computed(() => 
-  images.value.filter(img => img.predictions && img.predictions.length > 0).length
-);
+const identifiedImages = computed(() => {
+  const identified = images.value.filter(img => img.predictions && img.predictions.length > 0);
+  console.log('🔍 Computing identifiedImages:');
+  console.log('Total images:', images.value.length);
+  console.log('Images with predictions:', identified.length);
+  console.log('Sample predictions:', identified.slice(0, 2).map(img => ({
+    filename: img.filename,
+    predictions: img.predictions
+  })));
+  return identified.length;
+});
 
 const totalTags = computed(() => {
   const allTags = images.value.flatMap(img => img.tags || []);
-  return new Set(allTags).size;
+  const uniqueTags = new Set(allTags);
+  console.log('🏷️ Computing totalTags:');
+  console.log('All tags array:', allTags);
+  console.log('Unique tags:', Array.from(uniqueTags));
+  console.log('Total unique tags count:', uniqueTags.size);
+  return uniqueTags.size;
 });
 
 const thisWeekUploads = computed(() => {
@@ -297,6 +310,14 @@ const loadAllImages = async () => {
           [...aiData.species] : 
           (file.tags || []);
 
+        console.log('📊 Processing file for statistics:', {
+          filename: file.filename,
+          aiData: aiData,
+          predictions: predictions,
+          tags: tags,
+          hasAiTags: !!file.ai_tags
+        });
+
         const processedFile = {
           id: file.id || file.fileId || file.media_id || file.filename || Math.random().toString(36),
           filename: file.filename || file.name || file.originalName || 'unknown',
@@ -317,16 +338,7 @@ const loadAllImages = async () => {
         console.log('Image URL for display:', processedFile.url);
         console.log('Thumbnail URL for display:', processedFile.thumbnailUrl);
         
-        // Test if image URLs are accessible
-        if (processedFile.url) {
-          fetch(processedFile.url, { method: 'HEAD' })
-            .then(response => {
-              console.log(`Image ${processedFile.filename} URL status:`, response.status, response.ok ? '✅' : '❌');
-            })
-            .catch(error => {
-              console.log(`Image ${processedFile.filename} URL error:`, error.message, '❌');
-            });
-        }
+        // URL accessibility testing removed to avoid CORS issues
         return processedFile;
       });
     } else {
@@ -382,7 +394,41 @@ const performSearch = async () => {
         tags: searchForm.tags.split(',').map(tag => tag.trim())
       }));
     } else if (response.data && response.data.files) {
-      searchResults = response.data.files;
+      // Process search results same as regular files
+      searchResults = response.data.files.map(file => {
+        // Parse AI tags from backend
+        let aiData = { species: [], confidence: 0, description: '' };
+        if (file.ai_tags) {
+          try {
+            aiData = typeof file.ai_tags === 'string' ? JSON.parse(file.ai_tags) : file.ai_tags;
+          } catch (e) {
+            console.error('Error parsing ai_tags in search:', e, file.ai_tags);
+          }
+        }
+
+        // Convert AI data to frontend format
+        const predictions = aiData.species && aiData.species.length > 0 ? 
+          aiData.species.map(species => ({
+            label: species,
+            confidence: aiData.confidence || 0
+          })) : 
+          (file.predictions || file.aiResults || file.analysis || []);
+
+        const tags = aiData.species && aiData.species.length > 0 ? 
+          [...aiData.species] : 
+          (file.tags || []);
+
+        return {
+          id: file.id || file.fileId || file.media_id || file.filename || Math.random().toString(36),
+          filename: file.filename || file.name || file.originalName || 'unknown',
+          url: file.original_url || file.url || file.s3_url || file.fileUrl || file.downloadUrl || '',
+          thumbnailUrl: file.thumbnail_url || file.thumbnailUrl || file.thumbnail || file.original_url || '',
+          uploadedAt: file.uploadedAt || file.createdAt || file.timestamp || new Date().toISOString(),
+          predictions: predictions,
+          tags: tags,
+          description: aiData.description || ''
+        };
+      });
     } else if (Array.isArray(response.data)) {
       searchResults = response.data;
     }
@@ -392,7 +438,16 @@ const performSearch = async () => {
     
   } catch (error) {
     console.error('Error performing search:', error);
-    ElMessage.error('Search failed. Please try again.');
+    console.error('Search error details:', error.response?.data || error.message);
+    
+    if (error.response?.status === 500) {
+      ElMessage.error('Search service error. The backend search functionality may need to be implemented or fixed.');
+    } else if (error.response?.status === 404) {
+      ElMessage.error('Search endpoint not found. Please check the API configuration.');
+    } else {
+      ElMessage.error('Search failed. Please try again.');
+    }
+    
     images.value = [];
   } finally {
     searchLoading.value = false;

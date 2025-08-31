@@ -352,6 +352,31 @@ const deleteUpload = async (upload) => {
   }
 };
 
+const handleUploadSuccess = (event) => {
+  console.log('🎉 === UPLOAD SUCCESS EVENT IN UPLOAD VIEW ===');
+  console.log('📁 Upload success event data:', event);
+  console.log('📁 File details:', event.file);
+  console.log('🆔 File ID:', event.fileId);
+  console.log('🔗 S3 URL:', event.s3Url);
+  
+  ElMessage.success(`Successfully uploaded: ${event.file.name}`);
+  
+  // Reload recent uploads to show the new file
+  console.log('🔄 Reloading recent uploads to display new file...');
+  setTimeout(() => {
+    loadRecentUploads();
+  }, 2000); // Give backend time to process
+};
+
+const handleUploadError = (event) => {
+  console.error('❌ === UPLOAD ERROR EVENT IN UPLOAD VIEW ===');
+  console.error('📁 Upload error event data:', event);
+  console.error('📁 File details:', event.file);
+  console.error('❌ Error details:', event.error);
+  
+  ElMessage.error(`Failed to upload: ${event.file.name}`);
+};
+
 const clearAllUploads = () => {
   if (uploadComponent.value) {
     uploadComponent.value.clearFiles();

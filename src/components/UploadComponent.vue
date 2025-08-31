@@ -346,8 +346,7 @@ const handleUpload = async (options) => {
     console.log('📊 Upload response status:', uploadResponse.status)
     console.log('📋 Upload response headers:', uploadResponse.headers)
     
-    // Check for S3 ETag which confirms successful upload
-    const etag = uploadResponse.headers?.etag || uploadResponse.headers?.ETag
+    // Use the already declared etag variable
     if (etag) {
       console.log('✅ SUCCESS CONFIRMED: S3 returned ETag:', etag)
       console.log('✅ This proves the file was successfully uploaded to S3!')

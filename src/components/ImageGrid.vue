@@ -29,15 +29,6 @@
 
     <!-- Image grid -->
     <div v-else class="row g-4">
-      <div class="col-12 mb-3" v-if="!bulkMode">
-        <button
-          class="btn btn-outline-primary btn-sm"
-          @click="toggleBulkMode"
-        >
-          <i class="bi bi-check2-square me-1"></i>
-          Enable Bulk Selection
-        </button>
-      </div>
       
       <div
         v-for="image in images"
@@ -108,8 +99,39 @@
               </small>
             </div>
 
-            <!-- Tags -->
-            <div v-if="image.tags && image.tags.length > 0" class="mb-2">
+            <!-- AI Recognition Results (ai_tag) -->
+            <div v-if="image.ai_tag && Object.keys(image.ai_tag).length > 0" class="mb-2">
+              <div class="d-flex flex-wrap">
+                <span
+                  v-for="(confidence, tagName) in image.ai_tag"
+                  :key="tagName"
+                  class="badge bg-success me-1 mb-1"
+                  :title="`Confidence: ${Math.round(confidence * 100)}%`"
+                >
+                  {{ tagName }}
+                  <small class="ms-1">{{ Math.round(confidence * 100) }}%</small>
+                </span>
+              </div>
+            </div>
+
+            <!-- Manual Tags (tags) -->
+            <div v-if="image.tags && Object.keys(image.tags).length > 0" class="mb-2">
+              <div class="d-flex flex-wrap">
+                <span
+                  v-for="(confidence, tagName) in image.tags"
+                  :key="tagName"
+                  class="badge bg-primary me-1 mb-1"
+                  :title="`Manual tag - Confidence: ${Math.round(confidence * 100)}%`"
+                >
+                  <i class="bi bi-tag-fill me-1"></i>
+                  {{ tagName }}
+                  <small class="ms-1">{{ Math.round(confidence * 100) }}%</small>
+                </span>
+              </div>
+            </div>
+
+            <!-- Legacy Tags (for backward compatibility) -->
+            <div v-else-if="image.tags && Array.isArray(image.tags) && image.tags.length > 0" class="mb-2">
               <span
                 v-for="tag in image.tags.slice(0, 3)"
                 :key="tag"
@@ -177,17 +199,38 @@
               </div>
               <p v-else-if="!selectedImage.description" class="text-muted">No recognition results available</p>
 
-              <h6 class="mt-3">Tags:</h6>
-              <div v-if="selectedImage.tags && selectedImage.tags.length > 0">
-                <span
-                  v-for="tag in selectedImage.tags"
-                  :key="tag"
-                  class="badge bg-secondary me-1 mb-1"
+              <h6 class="mt-3">AI Recognition Results:</h6>
+              <div v-if="selectedImage.ai_tag && Object.keys(selectedImage.ai_tag).length > 0">
+                <div
+                  v-for="(confidence, tagName) in selectedImage.ai_tag"
+                  :key="tagName"
+                  class="d-flex justify-content-between align-items-center mb-2"
                 >
-                  {{ tag }}
-                </span>
+                  <span class="badge bg-success">{{ tagName }}</span>
+                  <span class="badge bg-primary">
+                    {{ Math.round(confidence * 100) }}%
+                  </span>
+                </div>
               </div>
-              <p v-else class="text-muted">No tags available</p>
+              <p v-else class="text-muted">No AI recognition results available</p>
+
+              <h6 class="mt-3">Manual Tags:</h6>
+              <div v-if="selectedImage.tags && Object.keys(selectedImage.tags).length > 0">
+                <div
+                  v-for="(confidence, tagName) in selectedImage.tags"
+                  :key="tagName"
+                  class="d-flex justify-content-between align-items-center mb-2"
+                >
+                  <span class="badge bg-primary">
+                    <i class="bi bi-tag-fill me-1"></i>
+                    {{ tagName }}
+                  </span>
+                  <span class="badge bg-info">
+                    {{ Math.round(confidence * 100) }}%
+                  </span>
+                </div>
+              </div>
+              <p v-else class="text-muted">No manual tags available</p>
             </div>
           </div>
         </div>
@@ -309,7 +352,16 @@ export default {
     },
     openTagModal(image) {
       this.selectedImage = image
-      this.tagInput = image.tags ? image.tags.join(', ') : ''
+      // Handle both object-based tags and array-based tags
+      if (image.tags && typeof image.tags === 'object' && !Array.isArray(image.tags)) {
+        // Object-based tags: { "tagName": confidence }
+        this.tagInput = Object.keys(image.tags).join(', ')
+      } else if (image.tags && Array.isArray(image.tags)) {
+        // Array-based tags: ["tag1", "tag2"]
+        this.tagInput = image.tags.join(', ')
+      } else {
+        this.tagInput = ''
+      }
       this.tagModal.show()
     },
     async updateTags() {
@@ -345,25 +397,6 @@ export default {
       this.$emit('toggle-selection', image);
     },
     
-
-    
-    async handleBulkTagUpdate(operation) {
-      try {
-        console.log('Bulk tag operation:', operation);
-        
-        // Here we would normally call the API
-        // For now, we'll emit to parent component
-        this.$emit('bulk-tag-update', operation);
-        
-        // Clear selection after successful operation
-        this.clearSelection();
-        this.bulkMode = false;
-        
-      } catch (error) {
-        console.error('Bulk tag update failed:', error);
-        throw error; // Re-throw for component to handle
-      }
-    },
     formatDate(dateString) {
       if (!dateString) return ''
       const date = new Date(dateString)

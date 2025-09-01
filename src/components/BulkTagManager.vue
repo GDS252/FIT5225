@@ -288,14 +288,20 @@ export default {
           tagsInput.value = '';
           console.log('🧹 [BulkTagManager] Form cleared');
           
-          // Close modal
-          const modal = document.getElementById('bulkTagModal');
-          const bsModal = bootstrap.Modal.getInstance(modal);
-          if (bsModal) {
-            bsModal.hide();
-            console.log('🔒 [BulkTagManager] Modal closed');
-          } else {
-            console.warn('⚠️ [BulkTagManager] Could not find modal instance to close');
+          // Close modal - simplified approach
+          console.log('🔒 [BulkTagManager] Attempting to close modal');
+          try {
+            // Method 1: Try to click the close button (most reliable)
+            const modal = document.getElementById('bulkTagModal');
+            const closeButton = modal?.querySelector('[data-bs-dismiss="modal"]');
+            if (closeButton) {
+              closeButton.click();
+              console.log('🔒 [BulkTagManager] Modal closed via close button click');
+            } else {
+              console.warn('⚠️ [BulkTagManager] Close button not found, modal may stay open');
+            }
+          } catch (modalError) {
+            console.error('❌ [BulkTagManager] Error closing modal:', modalError);
           }
           
           // Emit event to refresh data

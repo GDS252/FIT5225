@@ -920,11 +920,33 @@ const handleUpdateTags = async (imageId, tags) => {
 
     console.log('🔗 [DashboardView] Using image URL for tag update:', imageUrl);
     
-    // Convert tags array to the format expected by bulk tag API
-    // Lambda expects: tags: ["tagName, confidence", "tagName2, confidence2"]
-    let formattedTags = [];
+    // STRATEGY: Complete replacement of all manual tags
+    // Step 1: Remove all existing manual tags (operation = 0)
+    // Step 2: Add new tags (operation = 1)
+    
+    // First, get current manual tags to remove them
+    const currentManualTags = targetImage.tags || {};
+    console.log('🗑️ [DashboardView] Current manual tags to remove:', currentManualTags);
+    
+    // Step 1: Remove all existing manual tags if any exist
+    if (Object.keys(currentManualTags).length > 0) {
+      const tagsToRemove = Object.keys(currentManualTags).map(tagName => tagName);
+      console.log('🗑️ [DashboardView] Removing existing tags:', tagsToRemove);
+      
+      const removePayload = {
+        urls: [imageUrl],
+        operation: 0, // Remove operation
+        tags: tagsToRemove // Just tag names for removal
+      };
+      
+      console.log('📤 [DashboardView] Sending remove request:', removePayload);
+      await apiClient.post('/tags/update', removePayload);
+      console.log('✅ [DashboardView] Successfully removed existing tags');
+    }
+    
+    // Step 2: Add new tags if any provided
     if (Array.isArray(tags) && tags.length > 0) {
-      formattedTags = tags.map(tag => {
+      const formattedTags = tags.map(tag => {
         // If tag is just a string, add default confidence
         if (typeof tag === 'string') {
           return `${tag}, 0.8`;
@@ -935,30 +957,26 @@ const handleUpdateTags = async (imageId, tags) => {
         }
         return `${tag}, 0.8`;
       });
+
+      console.log('📝 [DashboardView] Adding new tags:', formattedTags);
+
+      const addPayload = {
+        urls: [imageUrl],
+        operation: 1, // Add operation
+        tags: formattedTags
+      };
+
+      console.log('📤 [DashboardView] Sending add request:', addPayload);
+      const response = await apiClient.post('/tags/update', addPayload);
+      console.log('✅ [DashboardView] Successfully added new tags:', response.data);
     }
-
-    console.log('📝 [DashboardView] Formatted tags array:', formattedTags);
-
-    // Use the bulk tag management API with operation = 1 (add/replace)
-    const requestPayload = {
-      urls: [imageUrl],
-      operation: 1, // Add/update operation
-      tags: formattedTags // Lambda expects 'tags' as array of strings
-    };
-
-    console.log('📤 [DashboardView] Sending bulk tag request:', requestPayload);
-    
-    // Call the bulk tag management API
-    const response = await apiClient.post('/tags/update', requestPayload);
-    
-    console.log('✅ [DashboardView] Bulk tag API response:', response.data);
     
     // Refresh the images to show updated tags
     console.log('🔄 [DashboardView] Refreshing images after tag update');
     await loadAllImages();
     
     ElMessage.success('Tags updated successfully');
-    console.log('✅ [DashboardView] Tags updated successfully for single image');
+    console.log('✅ [DashboardView] Tags completely replaced for single image');
     
   } catch (error) {
     console.error('❌ [DashboardView] Error updating tags:', error);

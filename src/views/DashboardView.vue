@@ -99,6 +99,17 @@
                     Find by Thumbnail
                   </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link"
+                    :class="{ active: searchType === 'birdCount' }"
+                    @click="searchType = 'birdCount'"
+                    type="button"
+                  >
+                    <i class="bi bi-binoculars me-1"></i>
+                    Search by Species & Count
+                  </button>
+                </li>
               </ul>
               
               <!-- Tag Search Form -->
@@ -183,6 +194,63 @@
                         {{ searchLoading ? 'Finding...' : 'Find Original' }}
                       </button>
                     </div>
+                  </div>
+                </div>
+              </form>
+              
+              <!-- Bird Count Search Form -->
+              <form v-if="searchType === 'birdCount'" @submit.prevent="performBirdCountSearch">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label for="birdSpecies" class="form-label">Bird Species</label>
+                    <div class="input-group">
+                      <span class="input-group-text">
+                        <i class="bi bi-binoculars"></i>
+                      </span>
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="birdSpecies"
+                        v-model="searchForm.species"
+                        placeholder="e.g. crow, sparrow, eagle..."
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="birdCount" class="form-label">Bird Count</label>
+                    <div class="input-group">
+                      <span class="input-group-text">#</span>
+                      <input
+                        type="number"
+                        class="form-control"
+                        id="birdCount"
+                        v-model="searchForm.count"
+                        min="1"
+                        max="99"
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid gap-2">
+                      <button
+                        type="submit"
+                        class="btn btn-warning"
+                        :disabled="searchLoading"
+                      >
+                        <span v-if="searchLoading" class="spinner-border spinner-border-sm me-2"></span>
+                        {{ searchLoading ? 'Searching...' : 'Find Birds' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="row mt-2">
+                  <div class="col-12">
+                    <small class="text-muted">
+                      <i class="bi bi-info-circle me-1"></i>
+                      Search for images containing a specific bird species (from AI recognition) with a particular count (from manual tags).
+                    </small>
                   </div>
                 </div>
               </form>
@@ -333,7 +401,9 @@ const bulkSelectMode = ref(false);
 const searchForm = reactive({
   tags: '',
   thumbnailUrl: '',
-  confidence: 50
+  confidence: 50,
+  species: '',
+  count: 1
 });
 
 // Computed properties
@@ -541,6 +611,8 @@ const loadAllImages = async () => {
 const clearSearch = () => {
   searchForm.tags = '';
   searchForm.thumbnailUrl = '';
+  searchForm.species = '';
+  searchForm.count = 1;
   searchType.value = 'tags';
   loadAllImages();
 };
@@ -660,6 +732,19 @@ const performThumbnailSearch = async () => {
   await performSearch('thumbnail');
 };
 
+// Bird count search
+const performBirdCountSearch = async () => {
+  if (!searchForm.species.trim()) {
+    ElMessage.warning('Please enter a bird species');
+    return;
+  }
+  if (!searchForm.count || searchForm.count < 1) {
+    ElMessage.warning('Please enter a valid bird count');
+    return;
+  }
+  await performSearch('birdCount');
+};
+
 // Unified search function
 const performSearch = async (type = 'tags') => {
   console.log('🔍 [DashboardView] Starting search process');
@@ -690,6 +775,51 @@ const performSearch = async (type = 'tags') => {
       console.log('🎯 [DashboardView] Sending request to /query/by-tags');
       
       response = await apiClient.post('/query/by-tags', requestPayload);
+      
+    } else if (type === 'birdCount') {
+      // Bird species and count search (local processing)
+      searchCriteria = { 
+        species: searchForm.species.trim().toLowerCase(),
+        count: searchForm.count.toString()
+      };
+      console.log('🐦 [DashboardView] Bird count search criteria:', searchCriteria);
+      
+      // Load all images first for local filtering
+      console.log('🔄 [DashboardView] Loading all images for bird count filtering...');
+      await loadAllImages();
+      
+      // Filter images locally based on species and count criteria
+      const filteredImages = images.value.filter(image => {
+        console.log('🔍 [DashboardView] Checking image:', image.filename);
+        console.log('🤖 [DashboardView] AI tags:', image.ai_tag);
+        console.log('🏷️ [DashboardView] Manual tags:', image.tags);
+        
+        // Check if AI tags contain the species
+        const hasSpecies = image.ai_tag && Object.keys(image.ai_tag).some(tag => 
+          tag.toLowerCase().includes(searchCriteria.species)
+        );
+        console.log('🎯 [DashboardView] Species match:', hasSpecies);
+        
+        // Check if manual tags contain the count (as pure number)
+        const hasCount = image.tags && Object.keys(image.tags).some(tag => {
+          // Check if the tag is exactly the count number
+          const isExactMatch = tag.trim() === searchCriteria.count;
+          // Also check if tag contains only the number
+          const isNumberOnly = /^\d+$/.test(tag.trim()) && tag.trim() === searchCriteria.count;
+          return isExactMatch || isNumberOnly;
+        });
+        console.log('🔢 [DashboardView] Count match:', hasCount);
+        
+        const matches = hasSpecies && hasCount;
+        console.log('✅ [DashboardView] Image matches both criteria:', matches);
+        return matches;
+      });
+      
+      console.log('🎉 [DashboardView] Filtered images found:', filteredImages.length);
+      images.value = filteredImages;
+      
+      ElMessage.success(`Found ${filteredImages.length} images with species "${searchCriteria.species}" and count "${searchCriteria.count}"`);
+      return; // Skip the rest of the API processing
       
     } else if (type === 'thumbnail') {
       // Thumbnail to original search
@@ -857,6 +987,8 @@ const performSearch = async (type = 'tags') => {
       ElMessage.success(`Found ${searchResults.length} images matching tags: ${searchForm.tags}`);
     } else if (type === 'thumbnail') {
       ElMessage.success(`Found original image for thumbnail`);
+    } else if (type === 'birdCount') {
+      // Success message already shown in the birdCount section above
     }
     
   } catch (error) {

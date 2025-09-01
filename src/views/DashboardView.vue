@@ -921,10 +921,10 @@ const handleUpdateTags = async (imageId, tags) => {
     console.log('🔗 [DashboardView] Using image URL for tag update:', imageUrl);
     
     // Convert tags array to the format expected by bulk tag API
-    // Format: "tagName, confidence; tagName2, confidence2"
-    let tagsString = '';
+    // Lambda expects: tags: ["tagName, confidence", "tagName2, confidence2"]
+    let formattedTags = [];
     if (Array.isArray(tags) && tags.length > 0) {
-      tagsString = tags.map(tag => {
+      formattedTags = tags.map(tag => {
         // If tag is just a string, add default confidence
         if (typeof tag === 'string') {
           return `${tag}, 0.8`;
@@ -934,16 +934,16 @@ const handleUpdateTags = async (imageId, tags) => {
           return `${tag.name}, ${tag.confidence || 0.8}`;
         }
         return `${tag}, 0.8`;
-      }).join('; ');
+      });
     }
 
-    console.log('📝 [DashboardView] Formatted tags string:', tagsString);
+    console.log('📝 [DashboardView] Formatted tags array:', formattedTags);
 
     // Use the bulk tag management API with operation = 1 (add/replace)
     const requestPayload = {
       urls: [imageUrl],
       operation: 1, // Add/update operation
-      tags_to_modify: tagsString
+      tags: formattedTags // Lambda expects 'tags' as array of strings
     };
 
     console.log('📤 [DashboardView] Sending bulk tag request:', requestPayload);

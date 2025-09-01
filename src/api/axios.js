@@ -9,8 +9,8 @@ const apiClient = axios.create({
   timeout: 30000, // 30 seconds timeout
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'Cache-Control': 'no-cache'
+    'Accept': 'application/json'
+    // 移除 Cache-Control 头，因为API Gateway CORS没有配置允许这个头
   }
 });
 
@@ -52,8 +52,8 @@ apiClient.interceptors.request.use(async (config) => {
       }
     }
     
-    // Add additional headers for CORS preflight
-    config.headers['X-Requested-With'] = 'XMLHttpRequest';
+    // 移除可能导致CORS问题的额外头
+    // config.headers['X-Requested-With'] = 'XMLHttpRequest';
     
     console.log('📤 [API] Final request headers:', Object.keys(config.headers));
     return config;

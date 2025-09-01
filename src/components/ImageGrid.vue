@@ -19,24 +19,55 @@
       </router-link>
     </div>
 
+    <!-- Bulk Selection Info -->
+    <div v-if="bulkSelectMode" class="bulk-selection-info mb-3">
+      <div class="alert alert-info d-flex align-items-center">
+        <i class="bi bi-check2-square me-2"></i>
+        <span>{{ selectedImages.length }} image(s) selected for bulk operations</span>
+      </div>
+    </div>
+
     <!-- Image grid -->
     <div v-else class="row g-4">
+      <div class="col-12 mb-3" v-if="!bulkMode">
+        <button
+          class="btn btn-outline-primary btn-sm"
+          @click="toggleBulkMode"
+        >
+          <i class="bi bi-check2-square me-1"></i>
+          Enable Bulk Selection
+        </button>
+      </div>
+      
       <div
         v-for="image in images"
         :key="image.id"
         class="col-12 col-sm-6 col-md-4 col-lg-3"
       >
-        <div class="card image-card h-100 shadow-sm">
+        <div 
+          class="card image-card h-100 shadow-sm"
+          :class="{ 'selected': isImageSelected(image), 'bulk-mode': bulkSelectMode }"
+        >
+          <!-- Bulk Selection Checkbox -->
+          <div v-if="bulkSelectMode" class="bulk-checkbox">
+            <input
+              type="checkbox"
+              class="form-check-input"
+              :checked="isImageSelected(image)"
+              @change="toggleSelection(image)"
+            />
+          </div>
+          
           <!-- Image -->
           <div class="image-container position-relative">
             <img
               :src="image.thumbnailUrl || image.url"
               :alt="image.filename"
               class="card-img-top"
-              @click="openImageModal(image)"
+              @click="bulkSelectMode ? toggleSelection(image) : openImageModal(image)"
               style="cursor: pointer"
             />
-            <div class="image-overlay">
+            <div class="image-overlay" v-if="!bulkSelectMode">
               <button
                 class="btn btn-light btn-sm me-2"
                 @click="openImageModal(image)"
@@ -129,6 +160,9 @@
             <!-- Detailed information -->
             <div v-if="selectedImage" class="mt-3 text-start">
               <h6>Recognition Results:</h6>
+              <div v-if="selectedImage.description">
+                <p class="mb-2">{{ selectedImage.description }}</p>
+              </div>
               <div v-if="selectedImage.predictions && selectedImage.predictions.length > 0">
                 <div
                   v-for="(prediction, index) in selectedImage.predictions"
@@ -141,7 +175,7 @@
                   </span>
                 </div>
               </div>
-              <p v-else class="text-muted">No recognition results available</p>
+              <p v-else-if="!selectedImage.description" class="text-muted">No recognition results available</p>
 
               <h6 class="mt-3">Tags:</h6>
               <div v-if="selectedImage.tags && selectedImage.tags.length > 0">
@@ -210,6 +244,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Bulk Tag Manager Component -->
+
   </div>
 </template>
 
@@ -218,6 +255,8 @@ import { Modal } from 'bootstrap'
 
 export default {
   name: 'ImageGrid',
+  components: {
+  },
   props: {
     images: {
       type: Array,
@@ -238,6 +277,14 @@ export default {
     showUploadButton: {
       type: Boolean,
       default: true
+    },
+    bulkSelectMode: {
+      type: Boolean,
+      default: false
+    },
+    selectedImages: {
+      type: Array,
+      default: () => []
     }
   },
   data() {
@@ -248,6 +295,8 @@ export default {
       imageModal: null,
       tagModal: null
     }
+  },
+  computed: {
   },
   mounted() {
     this.imageModal = new Modal(this.$refs.imageModal)
@@ -284,6 +333,35 @@ export default {
     confirmDelete(image) {
       if (confirm(`Are you sure you want to delete "${image.filename}"? This action cannot be undone.`)) {
         this.$emit('delete-image', image.id)
+      }
+    },
+    
+    // Bulk selection methods
+    isImageSelected(image) {
+      return this.selectedImages.some(img => img.id === image.id);
+    },
+    
+    toggleSelection(image) {
+      this.$emit('toggle-selection', image);
+    },
+    
+
+    
+    async handleBulkTagUpdate(operation) {
+      try {
+        console.log('Bulk tag operation:', operation);
+        
+        // Here we would normally call the API
+        // For now, we'll emit to parent component
+        this.$emit('bulk-tag-update', operation);
+        
+        // Clear selection after successful operation
+        this.clearSelection();
+        this.bulkMode = false;
+        
+      } catch (error) {
+        console.error('Bulk tag update failed:', error);
+        throw error; // Re-throw for component to handle
       }
     },
     formatDate(dateString) {
@@ -368,5 +446,35 @@ export default {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
   }
+}
+
+/* Bulk selection styles */
+.bulk-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.image-card.bulk-mode {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.image-card.bulk-mode:hover {
+  transform: translateY(-2px);
+}
+
+.image-card.selected {
+  border: 3px solid #007bff !important;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25) !important;
+}
+
+.bulk-operations .alert {
+  border: none;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
 }
 </style>

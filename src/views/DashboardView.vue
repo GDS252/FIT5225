@@ -75,9 +75,35 @@
                 Search and Filter
               </h5>
               
-              <form @submit.prevent="performSearch">
+              <!-- Search Type Tabs -->
+              <ul class="nav nav-tabs mb-3" id="searchTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link"
+                    :class="{ active: searchType === 'tags' }"
+                    @click="searchType = 'tags'"
+                    type="button"
+                  >
+                    <i class="bi bi-tags me-1"></i>
+                    Search by Tags
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link"
+                    :class="{ active: searchType === 'thumbnail' }"
+                    @click="searchType = 'thumbnail'"
+                    type="button"
+                  >
+                    <i class="bi bi-image me-1"></i>
+                    Find by Thumbnail
+                  </button>
+                </li>
+              </ul>
+              
+              <!-- Tag Search Form -->
+              <form v-if="searchType === 'tags'" @submit.prevent="performTagSearch">
                 <div class="row g-3">
-                  <!-- Bird Tags Search -->
                   <div class="col-md-6">
                     <label for="birdTags" class="form-label">Bird Tags Query</label>
                     <div class="input-group">
@@ -93,8 +119,6 @@
                       />
                     </div>
                   </div>
-
-                  <!-- Confidence Threshold -->
                   <div class="col-md-3">
                     <label for="confidence" class="form-label">Min Confidence</label>
                     <div class="input-group">
@@ -111,8 +135,6 @@
                       />
                     </div>
                   </div>
-
-                  <!-- Search Button -->
                   <div class="col-md-3">
                     <label class="form-label">&nbsp;</label>
                     <div class="d-grid gap-2">
@@ -124,18 +146,64 @@
                         <span v-if="searchLoading" class="spinner-border spinner-border-sm me-2"></span>
                         {{ searchLoading ? 'Searching...' : 'Search by Tags' }}
                       </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+              
+
+              
+              <!-- Thumbnail Search Form -->
+              <form v-if="searchType === 'thumbnail'" @submit.prevent="performThumbnailSearch">
+                <div class="row g-3">
+                  <div class="col-md-9">
+                    <label for="thumbnailUrl" class="form-label">Thumbnail URL</label>
+                    <div class="input-group">
+                      <span class="input-group-text">
+                        <i class="bi bi-link"></i>
+                      </span>
+                      <input
+                        type="url"
+                        class="form-control"
+                        id="thumbnailUrl"
+                        v-model="searchForm.thumbnailUrl"
+                        placeholder="https://bucket.s3.amazonaws.com/thumb_filename.jpg"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid gap-2">
                       <button
-                        type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        @click="loadAllImages"
-                        :disabled="imagesLoading"
+                        type="submit"
+                        class="btn btn-info"
+                        :disabled="searchLoading"
                       >
-                        Show All
+                        <span v-if="searchLoading" class="spinner-border spinner-border-sm me-2"></span>
+                        {{ searchLoading ? 'Finding...' : 'Find Original' }}
                       </button>
                     </div>
                   </div>
                 </div>
               </form>
+              
+              <!-- Common Controls -->
+              <div class="row mt-3">
+                <div class="col-12">
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm me-2"
+                    @click="clearSearch"
+                    :disabled="imagesLoading"
+                  >
+                    <i class="bi bi-x-circle me-1"></i>
+                    Clear & Show All
+                  </button>
+                  <small class="text-muted">
+                    Use different search types to find images by tags or locate originals from thumbnails.
+                  </small>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -145,30 +213,69 @@
       <div class="row">
         <div class="col-12">
           <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <h5 class="card-title mb-0">
-                <i class="bi bi-grid-3x3-gap-fill me-2"></i>
-                {{ currentViewTitle }}
-              </h5>
-              <div class="d-flex align-items-center">
-                <span class="text-muted me-3">Total {{ images.length }} images</span>
-                <div class="btn-group" role="group">
-                  <button
-                    type="button"
-                    class="btn btn-outline-secondary btn-sm"
-                    :class="{ active: sortBy === 'date' }"
-                    @click="sortBy = 'date'"
-                  >
-                    By Date
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-outline-secondary btn-sm"
-                    :class="{ active: sortBy === 'name' }"
-                    @click="sortBy = 'name'"
-                  >
-                    By Name
-                  </button>
+            <div class="card-header">
+              <div class="row align-items-center">
+                <div class="col-md-4">
+                  <h5 class="card-title mb-0">
+                    <i class="bi bi-grid-3x3-gap-fill me-2"></i>
+                    {{ currentViewTitle }}
+                  </h5>
+                </div>
+                <div class="col-md-4 text-center">
+                  <!-- Bulk Selection Controls -->
+                  <div v-if="images.length > 0" class="btn-group" role="group">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="bulkSelectMode ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="toggleBulkSelectMode"
+                    >
+                      <i class="bi bi-check-square me-1"></i>
+                      {{ bulkSelectMode ? 'Exit Select' : 'Bulk Select' }}
+                    </button>
+                    <button
+                      v-if="bulkSelectMode"
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm"
+                      @click="selectAllImages"
+                    >
+                      <i class="bi bi-check-all me-1"></i>
+                      {{ selectedImages.length === images.length ? 'Deselect All' : 'Select All' }}
+                    </button>
+                    <button
+                      v-if="bulkSelectMode && selectedImages.length > 0"
+                      type="button"
+                      class="btn btn-outline-success btn-sm"
+                      data-bs-toggle="modal"
+                      data-bs-target="#bulkTagModal"
+                    >
+                      <i class="bi bi-tags me-1"></i>
+                      Manage Tags ({{ selectedImages.length }})
+                    </button>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="d-flex align-items-center justify-content-end">
+                    <span class="text-muted me-3">Total {{ images.length }} images</span>
+                    <div class="btn-group" role="group">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        :class="{ active: sortBy === 'date' }"
+                        @click="sortBy = 'date'"
+                      >
+                        By Date
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        :class="{ active: sortBy === 'name' }"
+                        @click="sortBy = 'name'"
+                      >
+                        By Name
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -178,14 +285,26 @@
                 :loading="imagesLoading"
                 :empty-message="emptyMessage"
                 :empty-sub-message="emptySubMessage"
+                :bulk-select-mode="bulkSelectMode"
+                :selected-images="selectedImages"
                 @update-tags="handleUpdateTags"
                 @delete-image="handleDeleteImage"
+                @toggle-selection="toggleImageSelection"
               />
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Bulk Tag Manager Modal -->
+    <BulkTagManager 
+      :selected-images="selectedImages"
+      @tags-updated="handleTagsUpdated"
+    />
+
+    <!-- Email Subscription Footer -->
+    <EmailSubscription />
   </div>
 </template>
 
@@ -194,6 +313,8 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import AppHeader from '../components/AppHeader.vue';
 import ImageGrid from '../components/ImageGrid.vue';
+import BulkTagManager from '../components/BulkTagManager.vue';
+import EmailSubscription from '../components/EmailSubscription.vue';
 import apiClient from '@/api/axios.js';
 
 // Reactive data
@@ -202,9 +323,15 @@ const imagesLoading = ref(false);
 const searchLoading = ref(false);
 const isSearchActive = ref(false);
 const sortBy = ref('date');
+const searchType = ref('tags'); // 'tags', 'thumbnail'
+
+// Bulk selection state
+const selectedImages = ref([]);
+const bulkSelectMode = ref(false);
 
 const searchForm = reactive({
   tags: '',
+  thumbnailUrl: '',
   confidence: 50
 });
 
@@ -357,33 +484,219 @@ const loadAllImages = async () => {
   }
 };
 
-const performSearch = async () => {
+// Clear search and show all images
+const clearSearch = () => {
+  searchForm.tags = '';
+  searchForm.thumbnailUrl = '';
+  searchType.value = 'tags';
+  loadAllImages();
+};
+
+// Bulk selection methods
+const toggleBulkSelectMode = () => {
+  console.log('🔄 [DashboardView] Toggling bulk select mode');
+  console.log('📊 [DashboardView] Current bulk select mode:', bulkSelectMode.value);
+  
+  bulkSelectMode.value = !bulkSelectMode.value;
+  
+  console.log('📊 [DashboardView] New bulk select mode:', bulkSelectMode.value);
+  
+  if (!bulkSelectMode.value) {
+    console.log('🧹 [DashboardView] Clearing selected images');
+    selectedImages.value = [];
+  }
+  
+  console.log('✅ [DashboardView] Bulk select mode toggled successfully');
+};
+
+const toggleImageSelection = (image) => {
+  console.log('🖱️ [DashboardView] Toggling image selection');
+  console.log('🖼️ [DashboardView] Image to toggle:', { id: image.id, filename: image.filename });
+  
+  const index = selectedImages.value.findIndex(img => img.id === image.id);
+  console.log('📍 [DashboardView] Current selection index:', index);
+  
+  if (index > -1) {
+    selectedImages.value.splice(index, 1);
+    console.log('➖ [DashboardView] Image removed from selection');
+  } else {
+    selectedImages.value.push(image);
+    console.log('➕ [DashboardView] Image added to selection');
+  }
+  
+  console.log('📊 [DashboardView] Total selected images:', selectedImages.value.length);
+  console.log('🏷️ [DashboardView] Selected image IDs:', selectedImages.value.map(img => img.id));
+};
+
+const selectAllImages = () => {
+  console.log('🔲 [DashboardView] Select all images triggered');
+  console.log('📊 [DashboardView] Current selection count:', selectedImages.value.length);
+  console.log('📊 [DashboardView] Total available images:', images.value.length);
+  
+  if (selectedImages.value.length === images.value.length) {
+    selectedImages.value = [];
+    console.log('🧹 [DashboardView] All images deselected');
+  } else {
+    selectedImages.value = [...images.value];
+    console.log('✅ [DashboardView] All images selected');
+  }
+  
+  console.log('📊 [DashboardView] Final selection count:', selectedImages.value.length);
+};
+
+const isImageSelected = (image) => {
+  const selected = selectedImages.value.some(img => img.id === image.id);
+  // Only log occasionally to avoid spam
+  if (Math.random() < 0.01) { // 1% chance to log
+    console.log('🔍 [DashboardView] Checking image selection:', { id: image.id, selected });
+  }
+  return selected;
+};
+
+// Handle tags updated event from BulkTagManager
+const handleTagsUpdated = () => {
+  console.log('🔄 [DashboardView] Handling tags updated event');
+  console.log('📊 [DashboardView] Previously selected images count:', selectedImages.value.length);
+  
+  // Refresh the images after bulk tag update
+  console.log('🔄 [DashboardView] Refreshing images after bulk tag update');
+  loadAllImages();
+  
+  // Clear selection
+  console.log('🧹 [DashboardView] Clearing selection after tag update');
+  selectedImages.value = [];
+  bulkSelectMode.value = false;
+  
+  console.log('✅ [DashboardView] Tags updated handling completed');
+};
+
+// Tag search (existing functionality)
+const performTagSearch = async () => {
   if (!searchForm.tags.trim()) {
     ElMessage.warning('Please enter tags to search');
     return;
   }
+  await performSearch('tags');
+};
 
+
+
+// Thumbnail to original search
+const performThumbnailSearch = async () => {
+  if (!searchForm.thumbnailUrl.trim()) {
+    ElMessage.warning('Please enter a thumbnail URL');
+    return;
+  }
+  await performSearch('thumbnail');
+};
+
+// Unified search function
+const performSearch = async (type = 'tags') => {
+  console.log('🔍 [DashboardView] Starting search process');
+  console.log('🎯 [DashboardView] Search type:', type);
+  
   searchLoading.value = true;
   isSearchActive.value = true;
 
   try {
-    console.log('Performing search with criteria:', {
-      tags: searchForm.tags,
-      confidence: searchForm.confidence / 100
-    });
+    let response;
+    let searchCriteria = {};
 
-    // Call the backend API for tag-based search
-    const response = await apiClient.post('/query/by-tags', {
-      tags: searchForm.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-      minConfidence: searchForm.confidence / 100
-    });
+    if (type === 'tags') {
+      // Tag-based search
+      const tagArray = searchForm.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+      searchCriteria = {
+        tags: searchForm.tags,
+        confidence: searchForm.confidence / 100
+      };
+      console.log('🏷️ [DashboardView] Tag search criteria:', searchCriteria);
+      console.log('📝 [DashboardView] Parsed tags array:', tagArray);
+      
+      const requestPayload = {
+        tags: tagArray,
+        minConfidence: searchForm.confidence / 100
+      };
+      console.log('📤 [DashboardView] Tag search request payload:', requestPayload);
+      console.log('🎯 [DashboardView] Sending request to /query/by-tags');
+      
+      response = await apiClient.post('/query/by-tags', requestPayload);
+      
+    } else if (type === 'thumbnail') {
+      // Thumbnail to original search
+      searchCriteria = { thumbnailUrl: searchForm.thumbnailUrl };
+      console.log('🖼️ [DashboardView] Thumbnail search criteria:', searchCriteria);
+      console.log('🔗 [DashboardView] Thumbnail URL to search:', searchForm.thumbnailUrl.trim());
+      console.log('🎯 [DashboardView] Sending request to /query/by-thumbnail');
+      
+      try {
+        const requestParams = {
+          url: searchForm.thumbnailUrl.trim()
+        };
+        console.log('📤 [DashboardView] Thumbnail search params:', requestParams);
+        
+        response = await apiClient.get('/query/by-thumbnail', {
+          params: requestParams
+        });
+        
+        console.log('✅ [DashboardView] Thumbnail search response received:', response);
+      } catch (apiError) {
+        console.warn('⚠️ [DashboardView] Thumbnail API error, attempting local fallback:', apiError);
+        console.log('🔄 [DashboardView] Loading all images for local search...');
+        
+        // Fallback to local search
+        await loadAllImages();
+        const foundImage = images.value.find(image => 
+          image.thumbnailUrl === searchForm.thumbnailUrl.trim() ||
+          image.thumbnail_url === searchForm.thumbnailUrl.trim()
+        );
+        
+        console.log('🔍 [DashboardView] Local search result:', foundImage);
+        
+        if (foundImage) {
+          images.value = [foundImage];
+          console.log('🎉 [DashboardView] Found image locally');
+          ElMessage.success('Found the original image!');
+        } else {
+          images.value = [];
+          console.log('❌ [DashboardView] No matching image found locally');
+          ElMessage.warning('No matching image found for this thumbnail URL');
+        }
+        return;
+      }
+    }
     
-    console.log('Search response:', response.data);
+    console.log('📊 [DashboardView] Search response status:', response.status);
+    console.log('📄 [DashboardView] Search response data:', response.data);
     
     // Handle different response formats
     let searchResults = [];
-    if (response.data && response.data.links) {
+    
+    if (type === 'thumbnail' && response.data && response.data.original_url) {
+      // Handle thumbnail search response - single image result
+      console.log('🖼️ [DashboardView] Processing thumbnail search response');
+      console.log('🔗 [DashboardView] Original URL found:', response.data.original_url);
+      
+      searchResults = [{
+        id: `thumbnail-search-${Date.now()}`,
+        filename: response.data.original_url.split('/').pop() || 'found-image',
+        url: response.data.original_url,
+        thumbnailUrl: searchForm.thumbnailUrl,
+        uploadedAt: new Date().toISOString(),
+        predictions: [],
+        tags: []
+      }];
+      console.log('✅ [DashboardView] Thumbnail search result created:', searchResults[0]);
+      
+    } else if (type === 'thumbnail' && response.data && response.data.message) {
+      // Handle no matching image found
+      console.log('❌ [DashboardView] No matching image found:', response.data.message);
+      searchResults = [];
+      
+    } else if (response.data && response.data.links) {
       // If response contains links array
+      console.log('🔗 [DashboardView] Processing links array response');
+      console.log('📊 [DashboardView] Links count:', response.data.links.length);
+      
       searchResults = response.data.links.map((url, index) => ({
         id: `search-${index}`,
         filename: url.split('/').pop() || `image-${index}`,
@@ -393,6 +706,8 @@ const performSearch = async () => {
         predictions: [],
         tags: searchForm.tags.split(',').map(tag => tag.trim())
       }));
+      console.log('✅ [DashboardView] Links processed into search results:', searchResults.length);
+      
     } else if (response.data && response.data.files) {
       // Process search results same as regular files
       searchResults = response.data.files.map(file => {
@@ -434,17 +749,44 @@ const performSearch = async () => {
     }
     
     images.value = searchResults;
-    ElMessage.success(`Found ${searchResults.length} matching images`);
+    
+    // Show appropriate success message
+    if (type === 'tags') {
+      ElMessage.success(`Found ${searchResults.length} images matching tags: ${searchForm.tags}`);
+    } else if (type === 'thumbnail') {
+      ElMessage.success(`Found original image for thumbnail`);
+    }
     
   } catch (error) {
-    console.error('Error performing search:', error);
-    console.error('Search error details:', error.response?.data || error.message);
+    console.error('❌ [DashboardView] Error performing search:', error);
+    console.error('🔍 [DashboardView] Search error details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      searchType: type,
+      searchCriteria: searchCriteria,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers
+      }
+    });
     
     if (error.response?.status === 500) {
+      console.error('💥 [DashboardView] Server error during search');
       ElMessage.error('Search service error. The backend search functionality may need to be implemented or fixed.');
     } else if (error.response?.status === 404) {
+      console.error('🔍 [DashboardView] Search endpoint not found');
       ElMessage.error('Search endpoint not found. Please check the API configuration.');
+    } else if (error.response?.status === 400) {
+      console.warn('⚠️ [DashboardView] Bad request - invalid search parameters');
+      ElMessage.error('Invalid search parameters. Please check your input.');
+    } else if (!error.response) {
+      console.error('🌐 [DashboardView] Network error - no response received');
+      ElMessage.error('Network error. Please check your connection and try again.');
     } else {
+      console.error('🚫 [DashboardView] Unknown search error occurred');
       ElMessage.error('Search failed. Please try again.');
     }
     

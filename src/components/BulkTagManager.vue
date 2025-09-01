@@ -114,17 +114,33 @@
               <label class="form-label fw-bold">Selected Images</label>
               <div class="row g-2" style="max-height: 200px; overflow-y: auto;">
                 <div
-                  v-for="image in selectedImages.slice(0, 6)"
-                  :key="image.fileId"
+                  v-for="(image, index) in selectedImages.slice(0, 6)"
+                  :key="image.id || image.fileId || index"
                   class="col-md-2 col-4"
                 >
-                  <div class="card">
+                  <div class="card position-relative">
                     <img
-                      :src="image.thumbnail_url || image.original_url"
+                      :src="image.thumbnailUrl || image.thumbnail_url || image.url || image.original_url"
                       class="card-img-top"
                       style="height: 60px; object-fit: cover;"
-                      :alt="'Image ' + image.fileId"
+                      :alt="image.filename || ('Image ' + (image.id || image.fileId || index))"
+                      @error="handleImageError"
                     />
+                    <!-- Remove from selection button -->
+                    <button
+                      type="button"
+                      class="btn btn-danger btn-sm position-absolute top-0 end-0 m-1"
+                      style="padding: 2px 6px; font-size: 10px;"
+                      @click="removeFromSelection(image)"
+                      title="Remove from selection"
+                    >
+                      <i class="bi bi-x"></i>
+                    </button>
+                    <div class="card-body p-1">
+                      <small class="text-muted d-block text-truncate">
+                        {{ image.filename || 'Unknown' }}
+                      </small>
+                    </div>
                   </div>
                 </div>
                 <div v-if="selectedImages.length > 6" class="col-md-2 col-4">
@@ -174,7 +190,7 @@ export default {
       default: () => []
     }
   },
-  emits: ['tagsUpdated'],
+  emits: ['tagsUpdated', 'removeFromSelection'],
   setup(props, { emit }) {
     const operation = ref('add'); // 'add' or 'remove'
     const tagsInput = ref('');
@@ -236,7 +252,7 @@ export default {
       
       try {
         // Prepare the request body
-        const urls = props.selectedImages.map(image => image.original_url || image.url);
+        const urls = props.selectedImages.map(image => image.url || image.original_url);
         console.log('🔗 [BulkTagManager] Image URLs to update:', urls);
         
         const tags = parsedTags.value.map(tag => {
@@ -319,12 +335,24 @@ export default {
       }
     };
 
+    const removeFromSelection = (imageToRemove) => {
+      console.log('🗑️ [BulkTagManager] Removing image from selection:', imageToRemove);
+      emit('removeFromSelection', imageToRemove);
+    };
+
+    const handleImageError = (event) => {
+      console.warn('🖼️ [BulkTagManager] Image failed to load:', event.target.src);
+      event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAxNUMyMS4xMDQ2IDE1IDIyIDE1Ljg5NTQgMjIgMTdDMjIgMTguMTA0NiAyMS4xMDQ2IDE5IDIwIDE5QzE4Ljg5NTQgMTkgMTggMTguMTA0NiAxOCAxN0MxOCAxNS44OTU0IDE4Ljg5NTQgMTUgMjAgMTVaTTEzIDEzSDE5LjVMMjEuNSAxNUgyN0MyOC4xMDQ2IDE1IDI5IDE1Ljg5NTQgMjkgMTdWMjVDMjkgMjYuMTA0NiAyOC4xMDQ2IDI3IDI3IDI3SDEzQzExLjg5NTQgMjcgMTEgMjYuMTA0NiAxMSAyNVYxNUMxMSAxMy44OTU0IDExLjg5NTQgMTMgMTMgMTNaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
+    };
+
     return {
       operation,
       tagsInput,
       updating,
       parsedTags,
-      performBulkTagUpdate
+      performBulkTagUpdate,
+      removeFromSelection,
+      handleImageError
     };
   }
 };

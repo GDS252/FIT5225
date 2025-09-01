@@ -900,26 +900,82 @@ const performSearch = async (type = 'tags') => {
 
 const handleUpdateTags = async (imageId, tags) => {
   try {
-    console.log('Updating tags for image:', imageId, tags);
+    console.log('🏷️ [DashboardView] Updating tags for single image:', imageId, tags);
     
-    // Call backend API to update tags
-    await apiClient.post('/tags/update', {
-      fileId: imageId,
-      tags: tags
-    });
-    
-    // Update local data
-    const imageIndex = images.value.findIndex(img => img.id === imageId);
-    if (imageIndex !== -1) {
-      images.value[imageIndex].tags = tags;
+    // Find the image to get its URL
+    const targetImage = images.value.find(img => img.id === imageId);
+    if (!targetImage) {
+      console.error('❌ [DashboardView] Image not found:', imageId);
+      ElMessage.error('Image not found');
+      return;
     }
+
+    // Get the image URL for the bulk tag API
+    const imageUrl = targetImage.url || targetImage.original_url;
+    if (!imageUrl) {
+      console.error('❌ [DashboardView] No URL found for image:', targetImage);
+      ElMessage.error('Cannot find image URL');
+      return;
+    }
+
+    console.log('🔗 [DashboardView] Using image URL for tag update:', imageUrl);
+    
+    // Convert tags array to the format expected by bulk tag API
+    // Format: "tagName, confidence; tagName2, confidence2"
+    let tagsString = '';
+    if (Array.isArray(tags) && tags.length > 0) {
+      tagsString = tags.map(tag => {
+        // If tag is just a string, add default confidence
+        if (typeof tag === 'string') {
+          return `${tag}, 0.8`;
+        }
+        // If tag is an object with confidence
+        if (typeof tag === 'object' && tag.name) {
+          return `${tag.name}, ${tag.confidence || 0.8}`;
+        }
+        return `${tag}, 0.8`;
+      }).join('; ');
+    }
+
+    console.log('📝 [DashboardView] Formatted tags string:', tagsString);
+
+    // Use the bulk tag management API with operation = 1 (add/replace)
+    const requestPayload = {
+      urls: [imageUrl],
+      operation: 1, // Add/update operation
+      tags_to_modify: tagsString
+    };
+
+    console.log('📤 [DashboardView] Sending bulk tag request:', requestPayload);
+    
+    // Call the bulk tag management API
+    const response = await apiClient.post('/tags/update', requestPayload);
+    
+    console.log('✅ [DashboardView] Bulk tag API response:', response.data);
+    
+    // Refresh the images to show updated tags
+    console.log('🔄 [DashboardView] Refreshing images after tag update');
+    await loadAllImages();
     
     ElMessage.success('Tags updated successfully');
-    console.log('Tags updated successfully');
+    console.log('✅ [DashboardView] Tags updated successfully for single image');
     
   } catch (error) {
-    console.error('Error updating tags:', error);
-    ElMessage.error('Failed to update tags. Please try again.');
+    console.error('❌ [DashboardView] Error updating tags:', error);
+    console.error('🔍 [DashboardView] Error details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    if (error.response?.status === 500) {
+      ElMessage.error('Server error while updating tags. Please try again.');
+    } else if (error.response?.status === 400) {
+      ElMessage.error('Invalid tag format. Please check your input.');
+    } else {
+      ElMessage.error('Failed to update tags. Please try again.');
+    }
   }
 };
 

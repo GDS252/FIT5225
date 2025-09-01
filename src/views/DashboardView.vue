@@ -352,9 +352,9 @@ const identifiedImages = computed(() => {
 });
 
 const totalTags = computed(() => {
-  const allTags = images.value.flatMap(img => img.tags || []);
+  const allTags = images.value.flatMap(img => img.legacyTags || []);
   const uniqueTags = new Set(allTags);
-  console.log('🏷️ Computing totalTags:');
+  console.log('🏷️ [DashboardView] Computing totalTags:');
   console.log('All tags array:', allTags);
   console.log('Unique tags:', Array.from(uniqueTags));
   console.log('Total unique tags count:', uniqueTags.size);
@@ -415,18 +415,61 @@ const loadAllImages = async () => {
     if (files.length > 0) {
       images.value = files.map(file => {
         
-        // Parse AI tags from backend
+        // Parse AI tags from backend  
         let aiData = { species: [], confidence: 0, description: '' };
         if (file.ai_tags) {
           try {
             aiData = typeof file.ai_tags === 'string' ? JSON.parse(file.ai_tags) : file.ai_tags;
-            console.log('Parsed AI tags:', aiData);
+            console.log('📊 [DashboardView] Parsed AI tags:', aiData);
           } catch (e) {
-            console.error('Error parsing ai_tags:', e, file.ai_tags);
+            console.error('❌ [DashboardView] Error parsing ai_tags:', e, file.ai_tags);
           }
         }
 
-        // Convert AI data to frontend format
+        // Parse manual tags from DynamoDB
+        let manualTags = {};
+        if (file.tags) {
+          try {
+            console.log('🏷️ [DashboardView] Raw manual tags from backend:', file.tags);
+            
+            if (typeof file.tags === 'string') {
+              manualTags = JSON.parse(file.tags);
+            } else if (typeof file.tags === 'object') {
+              // Handle DynamoDB format: {"tagName": {"N": "0.8"}} or simple object
+              manualTags = {};
+              Object.keys(file.tags).forEach(tagName => {
+                const tagValue = file.tags[tagName];
+                if (tagValue && typeof tagValue === 'object' && tagValue.N) {
+                  // DynamoDB Number format: {"N": "0.8"}
+                  manualTags[tagName] = parseFloat(tagValue.N);
+                } else if (typeof tagValue === 'number') {
+                  // Already a number
+                  manualTags[tagName] = tagValue;
+                } else if (typeof tagValue === 'string') {
+                  // String number
+                  manualTags[tagName] = parseFloat(tagValue) || 0.8;
+                } else {
+                  // Default confidence
+                  manualTags[tagName] = 0.8;
+                }
+              });
+            }
+            console.log('✅ [DashboardView] Processed manual tags:', manualTags);
+          } catch (e) {
+            console.error('❌ [DashboardView] Error parsing manual tags:', e, file.tags);
+            manualTags = {};
+          }
+        }
+
+        // Parse AI tags for ai_tag field
+        let aiTags = {};
+        if (aiData.species && aiData.species.length > 0) {
+          aiData.species.forEach(species => {
+            aiTags[species] = aiData.confidence || 0.8;
+          });
+        }
+
+        // Convert AI data to frontend format (for backward compatibility)
         const predictions = aiData.species && aiData.species.length > 0 ? 
           aiData.species.map(species => ({
             label: species,
@@ -434,16 +477,21 @@ const loadAllImages = async () => {
           })) : 
           (file.predictions || file.aiResults || file.analysis || []);
 
-        const tags = aiData.species && aiData.species.length > 0 ? 
-          [...aiData.species] : 
-          (file.tags || []);
+        // Legacy tags array (for statistics)
+        const legacyTags = [
+          ...Object.keys(aiTags),
+          ...Object.keys(manualTags)
+        ];
 
-        console.log('📊 Processing file for statistics:', {
+        console.log('📊 [DashboardView] Processing file for statistics:', {
           filename: file.filename,
           aiData: aiData,
           predictions: predictions,
-          tags: tags,
-          hasAiTags: !!file.ai_tags
+          aiTags: aiTags,
+          manualTags: manualTags,
+          legacyTags: legacyTags,
+          hasAiTags: !!file.ai_tags,
+          hasManualTags: Object.keys(manualTags).length > 0
         });
 
         const processedFile = {
@@ -453,13 +501,17 @@ const loadAllImages = async () => {
           thumbnailUrl: file.thumbnail_url || file.thumbnailUrl || file.thumbnail || file.original_url || '',
           uploadedAt: file.uploadedAt || file.createdAt || file.timestamp || new Date().toISOString(),
           predictions: predictions,
-          tags: tags,
+          tags: manualTags, // Manual tags as object {tagName: confidence}
+          ai_tag: aiTags, // AI tags as object {tagName: confidence}
+          legacyTags: legacyTags, // For statistics compatibility
           description: aiData.description || '', // For Recognition Results
           // Add debugging info for image loading issues
           originalData: {
             media_id: file.media_id,
             original_url: file.original_url,
-            thumbnail_url: file.thumbnail_url
+            thumbnail_url: file.thumbnail_url,
+            raw_tags: file.tags,
+            raw_ai_tags: file.ai_tags
           }
         };
         console.log('Processed file result:', processedFile);
@@ -735,21 +787,52 @@ const performSearch = async (type = 'tags') => {
           try {
             aiData = typeof file.ai_tags === 'string' ? JSON.parse(file.ai_tags) : file.ai_tags;
           } catch (e) {
-            console.error('Error parsing ai_tags in search:', e, file.ai_tags);
+            console.error('❌ [DashboardView] Error parsing ai_tags in search:', e, file.ai_tags);
           }
         }
 
-        // Convert AI data to frontend format
+        // Parse manual tags from DynamoDB
+        let manualTags = {};
+        if (file.tags) {
+          try {
+            if (typeof file.tags === 'string') {
+              manualTags = JSON.parse(file.tags);
+            } else if (typeof file.tags === 'object') {
+              manualTags = {};
+              Object.keys(file.tags).forEach(tagName => {
+                const tagValue = file.tags[tagName];
+                if (tagValue && typeof tagValue === 'object' && tagValue.N) {
+                  manualTags[tagName] = parseFloat(tagValue.N);
+                } else if (typeof tagValue === 'number') {
+                  manualTags[tagName] = tagValue;
+                } else if (typeof tagValue === 'string') {
+                  manualTags[tagName] = parseFloat(tagValue) || 0.8;
+                } else {
+                  manualTags[tagName] = 0.8;
+                }
+              });
+            }
+          } catch (e) {
+            console.error('❌ [DashboardView] Error parsing manual tags in search:', e, file.tags);
+            manualTags = {};
+          }
+        }
+
+        // Parse AI tags for ai_tag field
+        let aiTags = {};
+        if (aiData.species && aiData.species.length > 0) {
+          aiData.species.forEach(species => {
+            aiTags[species] = aiData.confidence || 0.8;
+          });
+        }
+
+        // Convert AI data to frontend format (for backward compatibility)
         const predictions = aiData.species && aiData.species.length > 0 ? 
           aiData.species.map(species => ({
             label: species,
             confidence: aiData.confidence || 0
           })) : 
           (file.predictions || file.aiResults || file.analysis || []);
-
-        const tags = aiData.species && aiData.species.length > 0 ? 
-          [...aiData.species] : 
-          (file.tags || []);
 
         return {
           id: file.id || file.fileId || file.media_id || file.filename || Math.random().toString(36),
@@ -758,7 +841,8 @@ const performSearch = async (type = 'tags') => {
           thumbnailUrl: file.thumbnail_url || file.thumbnailUrl || file.thumbnail || file.original_url || '',
           uploadedAt: file.uploadedAt || file.createdAt || file.timestamp || new Date().toISOString(),
           predictions: predictions,
-          tags: tags,
+          tags: manualTags, // Manual tags as object
+          ai_tag: aiTags, // AI tags as object
           description: aiData.description || ''
         };
       });
@@ -998,4 +1082,5 @@ onMounted(() => {
     margin-bottom: 1rem;
   }
 }
+</style>
 </style>

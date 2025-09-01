@@ -301,6 +301,7 @@
     <BulkTagManager 
       :selected-images="selectedImages"
       @tags-updated="handleTagsUpdated"
+      @remove-from-selection="removeFromSelection"
     />
 
     <!-- Email Subscription Footer -->
@@ -568,6 +569,23 @@ const handleTagsUpdated = () => {
   bulkSelectMode.value = false;
   
   console.log('✅ [DashboardView] Tags updated handling completed');
+};
+
+// Remove image from selection
+const removeFromSelection = (imageToRemove) => {
+  console.log('🗑️ [DashboardView] Removing image from selection');
+  console.log('🖼️ [DashboardView] Image to remove:', { id: imageToRemove.id, filename: imageToRemove.filename });
+  
+  const index = selectedImages.value.findIndex(img => img.id === imageToRemove.id);
+  console.log('📍 [DashboardView] Image index in selection:', index);
+  
+  if (index > -1) {
+    selectedImages.value.splice(index, 1);
+    console.log('✅ [DashboardView] Image removed from selection');
+    console.log('📊 [DashboardView] Remaining selected images:', selectedImages.value.length);
+  } else {
+    console.warn('⚠️ [DashboardView] Image not found in selection');
+  }
 };
 
 // Tag search (existing functionality)
